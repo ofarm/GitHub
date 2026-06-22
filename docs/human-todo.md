@@ -7,7 +7,7 @@ Agent は実鍵・実データを持てないため、ここに「人間にし�
 
 ## 優先度: 高（リリースに必須）
 
-- [ ] **H-1 実 Google OAuth セットアップ**（→ T1.1.1 / T5.3）
+- [x] **H-1 実 Google OAuth セットアップ**（→ T1.1.1 / T5.3）
   - Google Cloud Console で OAuth クライアント作成。
   - リダイレクト URI: `http://localhost:3000/api/auth/callback/google`（本番は本番ドメイン）。
   - `.env.local` に `AUTH_GOOGLE_ID/SECRET`・`AUTH_SECRET`(`openssl rand -base64 32`)・`ALLOWED_EMAILS` を設定。
@@ -47,7 +47,7 @@ Agent は実鍵・実データを持てないため、ここに「人間にし�
 
 ## 完了の記録欄（人間が結果メモを残す）
 
-- H-1: （未）
+- H-1: ✅ 2026-06-22 本番 https://git-hub-tan.vercel.app/ で Google ログイン→/translate 到達を確認。allowlist 認可が本番動作。
 - H-2: （未）
 - H-3: （未）
 - H-4: （未）

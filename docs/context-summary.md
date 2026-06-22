@@ -7,7 +7,8 @@
 
 ## 確定している決定（変更は人間承認が必要）
 - スタック: Next.js(App Router)+TS+React、Auth.js(NextAuth v5)+Google OAuth、allowlist 認可。
-- 翻訳: OpenAI Realtime `gpt-realtime-translate`、WebRTC 直結、入力 en/出力 ja、per-minute 課金。
+- 翻訳: OpenAI Realtime `gpt-realtime-translate`、WebRTC 直結、出力 ja（入力は自動判定）、per-minute 課金。
+- 上流 GA エンドポイント（2026-05-12 beta 廃止後）: 発行=`/v1/realtime/translations/client_secrets`（出力言語は `session.audio.output.language`）、SDP 交換=`/v1/realtime/calls`（model は ek_ に束縛、`?model=` は付けない）。
 - 標準 API キーはサーバーのみ。ブラウザには短命 client secret(`ek_`, TTL120s) のみ。
 - 発行 API: `POST /api/realtime/client-secret`（認証+allowlist+rate、Safety-Id はメールのハッシュ）。
 - MVP: DB なし・履歴なし・外部分析/監視 SaaS なし。デプロイは Vercel。

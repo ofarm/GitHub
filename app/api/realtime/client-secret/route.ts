@@ -16,7 +16,11 @@ import { extractClientSecret, extractExpiresAt } from "@/lib/openaiResponse";
 
 export const runtime = "nodejs"; // node:crypto(safetyId) を使うため edge 不可。
 
-const OPENAI_CLIENT_SECRETS_URL = "https://api.openai.com/v1/realtime/client_secrets";
+// translate 専用の client secret 発行エンドポイント（GA）。env で上書き可。
+// ⚠️ verify: 正確なパス/ボディは最新 API リファレンスで確認（2026-05-12 に beta 廃止済）。
+const OPENAI_CLIENT_SECRETS_URL =
+  process.env.OPENAI_CLIENT_SECRETS_URL ??
+  "https://api.openai.com/v1/realtime/translations/client_secrets";
 
 function jsonError(code: string, status: number, extra?: Record<string, unknown>) {
   return Response.json({ error: code, ...extra }, { status });
@@ -43,7 +47,7 @@ export async function POST() {
   if (!apiKey) return jsonError("SERVER_MISCONFIGURED", 500);
   const model = process.env.OPENAI_REALTIME_MODEL ?? "gpt-realtime-translate";
   const ttl = Number(process.env.REALTIME_CLIENT_SECRET_TTL_SECONDS ?? "120");
-  const sourceLang = process.env.TRANSLATE_SOURCE_LANG ?? "en";
+  // 出力言語（日本語）。入力言語は translate モデルが自動判定（70+ 言語対応）。
   const targetLang = process.env.TRANSLATE_TARGET_LANG ?? "ja";
 
   // 5) OpenAI へ短命トークン発行を依頼（標準キーはサーバー内のみで使用）
@@ -59,12 +63,15 @@ export async function POST() {
       },
       body: JSON.stringify({
         expires_after: { anchor: "created_at", seconds: ttl },
-        // ⚠️ verify: translate セッションの正確な設定キーは最新ドキュメントで要確認。
+        // translate セッション設定。出力言語は session.audio.output.language。
+        // ⚠️ verify: 入力 transcription/noise_reduction 等の任意キーは最新ドキュメントで確認。
         session: {
           type: "realtime",
           model,
-          // 英→日のライブ翻訳設定（実キー名は要検証。サーバー側のみで設定）。
-          translation: { source_language: sourceLang, target_language: targetLang },
+          audio: {
+            input: { transcription: { model: "gpt-realtime-whisper" } },
+            output: { language: targetLang },
+          },
         },
       }),
     });

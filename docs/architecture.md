@@ -4,7 +4,7 @@
 
 - **Next.js (App Router) + TypeScript + React**、単一アプリ。
 - **Auth.js (NextAuth v5)** で OAuth + allowlist 認可。
-- **API route**（`POST /api/realtime/client-secret`）が `OPENAI_API_KEY` を使い、OpenAI の `POST /v1/realtime/client_secrets` で短命 client secret を発行。
+- **API route**（`POST /api/realtime/client-secret`）が `OPENAI_API_KEY` を使い、OpenAI の `POST /v1/realtime/translations/client_secrets` で短命 client secret を発行（出力言語は `session.audio.output.language`）。
 - **ブラウザが WebRTC** で OpenAI Realtime に直接ピア接続し、`gpt-realtime-translate` で英→日翻訳。マイク音声を送信、data channel で日本語 delta を受信して字幕表示。
 - **DB 無し**（MVP）。本文は保存しない。
 - **デプロイは Vercel**（採用理由は §4）。

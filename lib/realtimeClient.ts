@@ -23,7 +23,8 @@ export type RealtimeState =
   | "stopping"
   | "error";
 
-// ⚠️ verify: 実接続先。新仕様では /v1/realtime/calls 等の可能性あり。env で上書き可。
+// GA の SDP 交換エンドポイント。model は ek_(client secret) に束縛されるため
+// クエリ ?model= は付けない（付けると 400 になる既知事象あり）。env で上書き可。
 const REALTIME_BASE_URL =
   process.env.NEXT_PUBLIC_REALTIME_BASE_URL ?? "https://api.openai.com/v1/realtime/calls";
 
@@ -67,7 +68,7 @@ export class RealtimeSession {
         this.fail(code);
         return;
       }
-      const { clientSecret, model } = (await res.json()) as { clientSecret: string; model: string };
+      const { clientSecret } = (await res.json()) as { clientSecret: string };
 
       // 2) マイク取得（ユーザー操作起点で呼ばれる前提 / iOS Safari 対応）。
       this.setState("connecting");
@@ -96,7 +97,7 @@ export class RealtimeSession {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      const sdpRes = await fetch(`${REALTIME_BASE_URL}?model=${encodeURIComponent(model)}`, {
+      const sdpRes = await fetch(REALTIME_BASE_URL, {
         method: "POST",
         body: offer.sdp,
         headers: {
