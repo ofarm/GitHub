@@ -64,8 +64,17 @@ export class RealtimeSession {
       // 1) 自サーバから短命 client secret を取得（cookie 認証付き）。
       const res = await fetch("/api/realtime/client-secret", { method: "POST" });
       if (!res.ok) {
-        const code = res.status === 401 ? "AUTH_REQUIRED" : res.status === 403 ? "NOT_ALLOWED" : res.status === 429 ? "RATE_LIMITED" : "SECRET_FETCH_FAILED";
-        this.fail(code);
+        // サーバーの正規化エラーコードをそのまま前面化（本文は含まない）。
+        let code = "SECRET_FETCH_FAILED";
+        let upstream = "";
+        try {
+          const body = (await res.json()) as { error?: string; upstreamStatus?: number };
+          if (body.error) code = body.error;
+          if (body.upstreamStatus) upstream = String(body.upstreamStatus);
+        } catch {
+          /* 本文を読めない場合はコードのみ */
+        }
+        this.fail(upstream ? `${code} (上流:${upstream})` : code);
         return;
       }
       const { clientSecret } = (await res.json()) as { clientSecret: string };
@@ -106,7 +115,7 @@ export class RealtimeSession {
         },
       });
       if (!sdpRes.ok) {
-        this.fail("SDP_EXCHANGE_FAILED");
+        this.fail(`SDP_EXCHANGE_FAILED (${sdpRes.status})`);
         return;
       }
       const answer = { type: "answer" as const, sdp: await sdpRes.text() };

@@ -83,21 +83,19 @@ export default function TranslateClient() {
   );
 }
 
-// エラーコード → 表示文言（本文は含めない）。
+// エラーコード → 表示文言（本文は含めない。コード/HTTPステータスは診断用に表示）。
 function errorMessage(code: string): string {
-  switch (code) {
-    case "AUTH_REQUIRED":
-      return "セッションが切れました。再ログインしてください。";
-    case "NOT_ALLOWED":
-      return "このアカウントは利用を許可されていません。";
-    case "RATE_LIMITED":
-      return "リクエストが多すぎます。少し待って再試行してください。";
-    case "SDP_EXCHANGE_FAILED":
-    case "CONNECTION_LOST":
-      return "接続に失敗しました。再試行してください。";
-    case "START_FAILED":
-      return "マイクの取得または接続開始に失敗しました。マイク権限を確認してください。";
-    default:
-      return "エラーが発生しました。再試行してください。";
-  }
+  if (code.startsWith("AUTH_REQUIRED")) return "セッションが切れました。再ログインしてください。";
+  if (code.startsWith("NOT_ALLOWED")) return "このアカウントは利用を許可されていません。";
+  if (code.startsWith("RATE_LIMITED"))
+    return "リクエストが多すぎます。少し待って再試行してください。";
+  if (code.startsWith("SERVER_MISCONFIGURED"))
+    return "サーバーに OPENAI_API_KEY が未設定です（Vercel の環境変数追加と再デプロイを確認）。";
+  if (code.startsWith("UPSTREAM"))
+    return `OpenAI が発行リクエストを拒否しました（${code}）。APIキー・課金・モデル権限を確認してください。`;
+  if (code.startsWith("SDP_EXCHANGE_FAILED") || code.startsWith("CONNECTION_LOST"))
+    return `接続に失敗しました（${code}）。`;
+  if (code.startsWith("START_FAILED"))
+    return "マイクの取得または接続開始に失敗しました。マイク権限を確認してください。";
+  return `エラーが発生しました（コード: ${code}）。再試行してください。`;
 }
