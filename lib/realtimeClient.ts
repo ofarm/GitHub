@@ -218,16 +218,24 @@ export class RealtimeSession {
         window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       const ac = new Ctx();
       this.audioCtx = ac;
+      // AudioContext は suspended で始まることがあるため明示的に resume する。
+      ac.resume().catch(() => {
+        /* noop */
+      });
       const src = ac.createMediaStreamSource(stream);
       const analyser = ac.createAnalyser();
       analyser.fftSize = 512;
       src.connect(analyser);
       const buf = new Uint8Array(analyser.fftSize);
+      // 送信中マイクトラックが有効か（無効/ミュートなら無音送信）。
+      const track = stream.getAudioTracks()[0];
+      this.cb.onDiag?.("micTrack", track ? `${track.label || "mic"}/enabled:${track.enabled}` : "none");
       this.micTimer = window.setInterval(() => {
         analyser.getByteTimeDomainData(buf);
         let peak = 0;
         for (const v of buf) peak = Math.max(peak, Math.abs(v - 128));
         this.cb.onDiag?.("micLevel", String(peak));
+        this.cb.onDiag?.("micCtx", ac.state);
       }, 500);
     } catch {
       /* noop */
