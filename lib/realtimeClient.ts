@@ -13,6 +13,8 @@ export type RealtimeCallbacks = {
   onDelta: (text: string) => void; // 翻訳テキストの増分
   onStateChange?: (state: RealtimeState) => void;
   onError?: (code: string) => void;
+  // 診断用: 受信イベントの「種別名」と「キー名」のみ（値=本文は渡さない）。
+  onEvent?: (info: { type: string; keys: string[] }) => void;
 };
 
 export type RealtimeState =
@@ -135,6 +137,14 @@ export class RealtimeSession {
       evt = JSON.parse(typeof e.data === "string" ? e.data : "");
     } catch {
       return; // 本文をログせず黙って無視。
+    }
+    // 診断: 種別名とキー名のみ通知（値は渡さない）。
+    if (evt && typeof evt === "object") {
+      const o = evt as Record<string, unknown>;
+      this.cb.onEvent?.({
+        type: typeof o.type === "string" ? o.type : "(no type)",
+        keys: Object.keys(o),
+      });
     }
     const text = extractDeltaText(evt);
     if (text !== null) this.cb.onDelta(text);

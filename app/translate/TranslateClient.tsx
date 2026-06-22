@@ -16,8 +16,15 @@ export default function TranslateClient() {
   const [state, setState] = useState<RealtimeState>("idle");
   const [lines, setLines] = useState<string[]>([]);
   const [errorCode, setErrorCode] = useState<string | null>(null);
+  // 診断: ?debug=1 のときだけ受信イベント種別/キーを表示（値=本文は持たない）。
+  const [debug, setDebug] = useState(false);
+  const [eventTypes, setEventTypes] = useState<Record<string, string>>({});
   const sessionRef = useRef<RealtimeSession | null>(null);
   const currentLineRef = useRef<string>("");
+
+  useEffect(() => {
+    setDebug(new URLSearchParams(window.location.search).has("debug"));
+  }, []);
 
   const appendDelta = useCallback((text: string) => {
     // 増分を現在行に連結。改行で行を確定。本文はログしない。
@@ -40,6 +47,8 @@ export default function TranslateClient() {
       onDelta: appendDelta,
       onStateChange: setState,
       onError: setErrorCode,
+      onEvent: (info) =>
+        setEventTypes((prev) => ({ ...prev, [info.type]: info.keys.join(", ") })),
     });
     sessionRef.current = session;
     await session.start();
@@ -79,6 +88,31 @@ export default function TranslateClient() {
         </p>
       )}
       <Subtitles lines={lines} />
+      {debug && (
+        <div
+          style={{
+            fontSize: 12,
+            fontFamily: "monospace",
+            color: "var(--muted)",
+            background: "rgba(255,255,255,0.04)",
+            borderRadius: 8,
+            padding: 12,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-all",
+          }}
+        >
+          <div>診断: 受信イベント種別（本文なし）</div>
+          {Object.keys(eventTypes).length === 0 ? (
+            <div>（まだイベント未受信）</div>
+          ) : (
+            Object.entries(eventTypes).map(([type, keys]) => (
+              <div key={type}>
+                • {type} — keys: [{keys}]
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </>
   );
 }
