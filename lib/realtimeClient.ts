@@ -88,8 +88,12 @@ export class RealtimeSession {
       const { clientSecret } = (await res.json()) as { clientSecret: string };
 
       // 2) マイク取得（ユーザー操作起点で呼ばれる前提 / iOS Safari 対応）。
+      // 会議などの周囲音声を拾いやすくするため、エコー除去/ノイズ抑制/自動ゲインを無効化。
+      // （スピーカーから出る相手の声を拾う用途。ヘッドホン利用時は別途システム音声取込が必要）
       this.setState("connecting");
-      this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      });
 
       // 3) PeerConnection 構築。音声 sender を控えて送信レベルを計測する。
       const pc = new RTCPeerConnection();

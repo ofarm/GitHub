@@ -24,10 +24,10 @@
 | ID | チケット | ステータス | 受け入れ条件 |
 |---|---|---|---|
 | T2.1.1 | `POST /api/realtime/client-secret`（認証+allowlist+rate） | DONE | 未認証/許可外で 401/403、超過で 429 |
-| T2.1.2 | OpenAI `client_secrets` 呼び出し（TTL120/translate/en→ja） | REVIEW | `ek_` のみ返す実装済。⚠️実 wire スキーマは要検証(verify) |
+| T2.1.2 | OpenAI `client_secrets` 呼び出し（TTL120/translate/出力ja） | DONE | translations/client_secrets・cookbook形ボディで本番動作確認 |
 | T2.1.3 | Safety Identifier ハッシュ（メール非平文） | DONE | 送信値が平文メールでない（テスト緑） |
 | T2.2.1 | レート制限（ユーザー単位） | DONE | 超過で 429（テスト緑） |
-| T3.1.1 | WebRTC 接続（getUserMedia+PeerConnection+data ch） | REVIEW | 実装済。⚠️SDP URL/event名は要検証(verify)・実機未確認 |
+| T3.1.1 | WebRTC 接続（getUserMedia+PeerConnection+data ch） | DONE | /translations/calls・session.output_transcript.delta で本番動作確認 |
 | T3.1.2 | 接続ライフサイクル状態管理 | DONE | idle→connecting→live→idle 遷移 |
 | T3.2.1 | Start/Stop/Clear 実装 | DONE | Stop でマイク・接続解放、Clear で字幕消去 |
 | T3.2.2 | unload/visibility での解放 | DONE | pagehide/visibilitychange で解放 |

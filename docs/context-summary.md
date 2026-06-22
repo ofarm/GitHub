@@ -31,12 +31,11 @@
 - Gate 5 静的セキュリティレビュー #1 完了（Critical/High なし）→ `docs/security-review.md`。
 - 人間の残作業は `docs/human-todo.md`（H-1〜H-8）に集約。
 
-## H-2 デバッグ状況（2026-06-22）
-- サーバー（client secret 発行）は 200 で正常。WebRTC は conn/ice/dataChannel/remoteTrack/audioPlay すべて確立。
-- 症状: 翻訳の音声・字幕が出ない。`output_audio_buffer.started` は出るが中身が空。
-- 計測: 送信音声レベル(micLevel)が 0。OS のマイクは正常 → **Chrome が別マイクを使っている疑い**が最有力。
-- 対応: micLevel を `RTCRtpSender.getStats().audioLevel`（実送信レベル）に変更し本UIに常時表示。0なら Chrome のマイク選択、動くならモデル設定(turn_detection 等)の順で切り分ける。
-- 発行ボディは cookbook と完全一致（変更しない）。turn_detection は cookbook 非記載のため未追加（必要時に検証して追加）。
+## H-2 完了（2026-06-22）— 翻訳が本番で動作
+- 英→日の字幕・音声ともに本番(git-hub-tan.vercel.app)で動作確認。
+- 確定した実 wire: 発行=`/v1/realtime/translations/client_secrets`（cookbook 形ボディ・session.audio.output.language=ja）、SDP=`/v1/realtime/translations/calls`、翻訳テキスト=`session.output_transcript.delta`(delta)。
+- 詰まりの真因は Chrome のマイク選択（OS は正常でも別デバイス）。getStats の送信レベル可視化で特定→Chrome 側でマイク変更し解決。
+- 用途確定: **字幕メイン**。翻訳音声は既定オフ（トグルで任意再生）。会議の周囲音声を拾うため getUserMedia は echoCancellation/noiseSuppression/autoGainControl=false。
 
 ## 次のチケット（最大3件）
 1. 人間: H-1（実 OAuth）/ H-2（OpenAI 実 wire 検証）/ H-3（ZDR 確認）。

@@ -13,7 +13,7 @@ Agent は実鍵・実データを持てないため、ここに「人間にし�
   - `.env.local` に `AUTH_GOOGLE_ID/SECRET`・`AUTH_SECRET`(`openssl rand -base64 32`)・`ALLOWED_EMAILS` を設定。
   - 確認: 許可メールでログイン成功、許可外メールはサインイン拒否されること。
 
-- [ ] **H-2 OpenAI 実 wire スキーマ検証**（→ T2.1.2 / T3.1.1、コードの `⚠️ verify` 箇所）
+- [x] **H-2 OpenAI 実 wire スキーマ検証 / 実翻訳**（→ T2.1.2 / T3.1.1）
   - `.env.local` に実 `OPENAI_API_KEY`、ZDR/Modified Abuse Monitoring 承認済みの組織/プロジェクト。
   - `POST /v1/realtime/client_secrets` の正確なリクエストボディ（特に translate セッション設定キー）とレスポンス形（`value`/`expires_at`）を最新ドキュメントで確認し、`app/api/realtime/client-secret/route.ts` を必要なら微修正。
   - ブラウザの SDP 送信先 URL（`NEXT_PUBLIC_REALTIME_BASE_URL`）と data channel の event `type` 名を確認し、`lib/realtimeClient.ts` を調整。
@@ -48,6 +48,6 @@ Agent は実鍵・実データを持てないため、ここに「人間にし�
 ## 完了の記録欄（人間が結果メモを残す）
 
 - H-1: ✅ 2026-06-22 本番 https://git-hub-tan.vercel.app/ で Google ログイン→/translate 到達を確認。allowlist 認可が本番動作。
-- H-2: （未）
+- H-2: ✅ 2026-06-22 英語→日本語の字幕・音声ともに本番動作を確認。発行ボディは cookbook 形に修正、SDP は /translations/calls。詰まり原因は Chrome のマイク選択（OSは正常でも別デバイス）→ Chrome 側でマイク変更で解決。
 - H-3: （未）
 - H-4: （未）

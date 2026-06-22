@@ -27,10 +27,12 @@ export function Subtitles({ lines }: { lines: string[] }) {
       }}
     >
       {lines.length === 0 ? (
-        <p style={{ color: "var(--muted)" }}>Start を押して英語を話すと、日本語字幕が表示されます。</p>
+        <p style={{ color: "var(--muted)" }}>
+          Start を押すと、会議などの英語音声がリアルタイムで日本語字幕になります。
+        </p>
       ) : (
         lines.map((line, i) => (
-          <p key={i} style={{ margin: "0 0 8px", opacity: i === lines.length - 1 ? 1 : 0.7 }}>
+          <p key={i} style={{ margin: "0 0 10px", opacity: i === lines.length - 1 ? 1 : 0.85 }}>
             {line}
           </p>
         ))

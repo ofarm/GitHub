@@ -29,6 +29,8 @@ export default function TranslateClient() {
   // マイク入力レベル（0〜128程度）。本UIに常時表示し、無音を即検知できるようにする。
   const [micLevel, setMicLevel] = useState(0);
   const [micPeak, setMicPeak] = useState(0); // Start 以降の最大値（無音判定用）。
+  // 字幕メイン。翻訳音声はデフォルト無音。必要な場合のみ再生する。
+  const [playAudio, setPlayAudio] = useState(false);
   // 診断: ?debug=1 のときだけ受信イベント種別/キーを表示（値=本文は持たない）。
   const [debug, setDebug] = useState(false);
   const [eventTypes, setEventTypes] = useState<Record<string, string>>({});
@@ -39,6 +41,11 @@ export default function TranslateClient() {
   useEffect(() => {
     setDebug(new URLSearchParams(window.location.search).has("debug"));
   }, []);
+
+  // 翻訳音声のミュート制御（既定は無音）。
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.muted = !playAudio;
+  }, [playAudio]);
 
   const appendDelta = useCallback((text: string) => {
     // 増分を現在行に連結。改行で行を確定。本文はログしない。
@@ -171,10 +178,27 @@ export default function TranslateClient() {
         </div>
       )}
 
-      {/* 翻訳音声の再生（モデルは日本語音声を生成）。聞こえない場合は▶で手動再生。 */}
-      <audio ref={audioRef} autoPlay playsInline controls style={{ width: "100%" }} />
+      {/* 翻訳音声は既定で無音（字幕メイン）。トグルで任意に再生可能。 */}
+      <audio ref={audioRef} autoPlay playsInline muted style={{ display: "none" }} />
 
       <Subtitles lines={lines} />
+
+      <label
+        style={{
+          fontSize: 13,
+          color: "var(--muted)",
+          display: "flex",
+          gap: 6,
+          alignItems: "center",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={playAudio}
+          onChange={(e) => setPlayAudio(e.target.checked)}
+        />
+        翻訳音声も再生する（任意・既定はオフ）
+      </label>
 
       {debug && (
         <div
