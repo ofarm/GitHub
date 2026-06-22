@@ -98,7 +98,11 @@ export class RealtimeSession {
       // 4) data channel（サーバーイベント受信）。
       const dc = pc.createDataChannel("oai-events");
       this.dc = dc;
-      dc.addEventListener("message", (e) => this.handleEvent(e));
+      dc.addEventListener("message", (e) => this.handleMessage(e.data));
+      // サーバー側が別の data channel を開く場合にも対応（モデル出力イベント取りこぼし防止）。
+      pc.addEventListener("datachannel", (e) => {
+        e.channel.addEventListener("message", (ev) => this.handleMessage(ev.data));
+      });
       // 接続確立後に session.update を明示送信して transcript 配信を有効化する。
       // （client_secret 側で設定済みでも、明示更新で transcript イベントが流れ出すことがある）
       dc.addEventListener("open", () => {
@@ -153,11 +157,32 @@ export class RealtimeSession {
     }
   }
 
-  // サーバーイベントを解釈し、翻訳テキストの増分のみ抽出する。
-  private handleEvent(e: MessageEvent) {
+  // data channel メッセージは string / Blob / ArrayBuffer のいずれでも届きうる。
+  // 文字列以外で捨てると transcript を取りこぼすため、全形式を JSON 文字列へ正規化する。
+  private handleMessage(data: unknown) {
+    if (typeof data === "string") {
+      this.processEventString(data);
+    } else if (typeof Blob !== "undefined" && data instanceof Blob) {
+      data
+        .text()
+        .then((t) => this.processEventString(t))
+        .catch(() => {
+          /* noop */
+        });
+    } else if (data instanceof ArrayBuffer) {
+      try {
+        this.processEventString(new TextDecoder().decode(data));
+      } catch {
+        /* noop */
+      }
+    }
+  }
+
+  // JSON 文字列を解釈し、翻訳テキストの増分のみ抽出する。
+  private processEventString(s: string) {
     let evt: unknown;
     try {
-      evt = JSON.parse(typeof e.data === "string" ? e.data : "");
+      evt = JSON.parse(s);
     } catch {
       return; // 本文をログせず黙って無視。
     }
