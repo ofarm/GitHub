@@ -17,13 +17,18 @@
 標準キー非露出 / NEXT_PUBLIC_ に秘密禁止 / 本文を保存・ログ・console・storage 禁止 / 認証+allowlist 必須 / 履歴・DB・外部 SaaS を MVP に足さない / チケット範囲外・アーキ変更禁止 / 実データ不使用。
 
 ## 現在の状況
-- Gate 0（要件・制約確定）完了：docs 一式・AGENTS・TASKS 作成済み。実装コードはまだ無し。
-- 次は Sprint 0（リポジトリ土台）→ Sprint 1（認証）。
+- Gate 0〜3 の実装が一巡。Next.js+Auth.js+allowlist+client secret 発行API+WebRTC配線+字幕UI まで実装済み。
+- 検証: typecheck green / build green / 単体テスト 12 緑 / 秘密・本文・storage 混入なし（grep 確認）。
+- **Agent 側で完了できない残作業**（実鍵が必要・Agent には渡さない）:
+  - 実 Google OAuth でのログイン E2E（T5.3 系）。
+  - OpenAI 実 wire スキーマ検証: `client_secrets` ボディ / translate セッション設定 / SDP 送信先 URL / event type 名（コード内 `⚠️ verify` 箇所）。
+  - iPhone 実機確認、ZDR/Modified Abuse Monitoring 申請状況(T4.3)。
+- audit: dev/build 推移依存の例外を docs/security.md §18 に記録。
 
 ## 次のチケット（最大3件）
-1. Sprint0: Next.js 雛形・`.gitignore`・最小構成（依存最小）。
-2. T1.1.1: Auth.js + Google OAuth 設定。
-3. T1.2.1/1.2.2: allowlist 二重照合。
+1. T4.3: ZDR/Modified Abuse Monitoring の申請・対象エンドポイント確認（人間）。
+2. T2.1.2/T3.1.1 の `⚠️ verify` 箇所を実鍵で検証（人間 or 鍵保有環境）。
+3. T5.1 セキュリティレビュー → T5.3 実機 → T5.4 リリース判定。
 
 ## 参照
 要件=docs/requirements / 設計=docs/architecture / セキュリティ=docs/security / データ=docs/privacy-data-handling / 戦略=docs/agent-strategy / バックログ=docs/backlog / リスク=docs/risks / チケット=TASKS.md。

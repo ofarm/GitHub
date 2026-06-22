@@ -25,7 +25,21 @@
 | [`TASKS.md`](./TASKS.md) | チケット一覧とステータス |
 | [`docs/adr/`](./docs/adr/) | アーキテクチャ判断記録（ADR） |
 
+## セットアップ
+
+```bash
+cp .env.example .env.local   # 実値を入れる（コミット禁止）
+npm install
+npm run dev                  # http://localhost:3000
+npm run typecheck            # 型チェック
+npm run test                 # 単体テスト
+npm run build                # 本番ビルド
+```
+
+OAuth は Google のテスト用クライアントを作成し、`AUTH_GOOGLE_ID/SECRET` と `AUTH_SECRET`（`openssl rand -base64 32`）、`OPENAI_API_KEY`、`ALLOWED_EMAILS` を `.env.local` に設定する。
+
 ## 現状
 
-**Gate 0（要件・制約確定）の設計フェーズ**。実装コードはまだ存在しない。
-次の作業は Sprint 0（リポジトリ土台・認証方針・secrets 管理）。詳細は `TASKS.md` を参照。
+**Gate 0〜3 の実装が一巡**。認証(Auth.js+Google+allowlist)・client secret 発行 API・WebRTC 配線・字幕 UI まで実装済み。typecheck / build / 単体テスト(12) green。秘密・本文・storage の混入なしを確認済み。
+
+実鍵が必要な検証（実 OAuth ログイン、OpenAI の実 wire スキーマ、iPhone 実機、ZDR 申請）は**人間側の残作業**。詳細は `TASKS.md` 末尾と `docs/context-summary.md`。コードの `⚠️ verify` コメントが実鍵での確認ポイント。

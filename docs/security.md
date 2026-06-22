@@ -95,6 +95,16 @@
 - `npm audit`（high 以上はリリース前に解消 or 例外理由を記録）。
 - 依存追加は最小限・理由明記。lockfile をコミット。
 
+## 18. npm audit 例外記録（2026-06-22 時点）
+
+`npm install` 後の audit で moderate〜critical が報告されるが、**いずれも dev/build 時の推移的依存**であり、本番ランタイムの攻撃面ではない。`npm audit fix --force` は Next/vitest を破壊的に旧版へ降格させるため**実施しない**。MVP では下記を受容例外として記録し、上流の更新で解消する。
+
+- `esbuild`（vitest → vite 経由）: 開発サーバの脆弱性。本番は dev サーバを動かさないため非該当。
+- `postcss`（Next 経由・CSS Stringify の XSS）: 攻撃者制御の CSS 入力が前提。本アプリにそのような経路はない。
+- これらは Next / vitest の上流が patch を出し次第バージョン更新で解消（T5.2）。
+
+リリース前に再評価し、ランタイムに影響する high/critical が出た場合は解消を必須とする。
+
 ## 16. デプロイ / HTTPS 前提
 
 - 本番は HTTPS 必須（マイク getUserMedia は secure context が必要）。
