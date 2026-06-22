@@ -76,18 +76,38 @@ export async function POST() {
       }),
     });
   } catch {
-    // 例外本文をそのまま返さない/ログしない（種別のみ）。
+    // 例外本文をそのまま返さない（種別のみ）。発行段階のため音声/本文は無い。
+    console.error("[client-secret] upstream unreachable");
     return jsonError("UPSTREAM_UNREACHABLE", 502);
   }
 
   if (!upstream.ok) {
-    // 上流エラー本文を返さない（情報漏えい・本文混入回避）。ステータスのみ転送。
-    return jsonError("UPSTREAM_ERROR", 502, { upstreamStatus: upstream.status });
+    // 発行段階のため音声/transcript は存在しない。OpenAI が返す「リクエスト形」の
+    // エラー（status/code/message）のみ診断用に出す（会話本文ではない＝方針OK）。
+    let upstreamCode = "";
+    try {
+      const errBody = (await upstream.json()) as {
+        error?: { message?: string; code?: string; type?: string };
+      };
+      upstreamCode = errBody?.error?.code || errBody?.error?.type || "";
+      console.error(
+        `[client-secret] upstream ${upstream.status} ${upstreamCode} ${errBody?.error?.message ?? ""}`.slice(
+          0,
+          300,
+        ),
+      );
+    } catch {
+      console.error(`[client-secret] upstream ${upstream.status}`);
+    }
+    return jsonError("UPSTREAM_ERROR", 502, { upstreamStatus: upstream.status, upstreamCode });
   }
 
   const data: unknown = await upstream.json().catch(() => null);
   const clientSecret = extractClientSecret(data);
-  if (!clientSecret) return jsonError("UPSTREAM_BAD_SHAPE", 502);
+  if (!clientSecret) {
+    console.error("[client-secret] upstream 200 but no client secret in response");
+    return jsonError("UPSTREAM_BAD_SHAPE", 502);
+  }
 
   // 6) ブラウザには ek_ と接続に必要な最小情報のみ返す（標準キーは返さない）。
   return Response.json(
