@@ -56,6 +56,8 @@ export class RealtimeSession {
   private stream: MediaStream | null = null;
   private dc: RTCDataChannel | null = null;
   private cb: RealtimeCallbacks;
+  private audioCtx: AudioContext | null = null;
+  private micTimer: number | null = null;
 
   constructor(cb: RealtimeCallbacks) {
     this.cb = cb;
@@ -89,6 +91,7 @@ export class RealtimeSession {
       // 2) マイク取得（ユーザー操作起点で呼ばれる前提 / iOS Safari 対応）。
       this.setState("connecting");
       this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      this.startMicMeter(this.stream);
 
       // 3) PeerConnection 構築。
       const pc = new RTCPeerConnection();
@@ -207,6 +210,43 @@ export class RealtimeSession {
     if (text !== null) this.cb.onDelta(text);
   }
 
+  // マイク入力レベルの簡易メータ（診断）。本文ではなく音量ピーク値のみを通知。
+  // 話したときに値が動く=マイクは拾えている。0付近のまま=マイクが無音。
+  private startMicMeter(stream: MediaStream) {
+    try {
+      const Ctx =
+        window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ac = new Ctx();
+      this.audioCtx = ac;
+      const src = ac.createMediaStreamSource(stream);
+      const analyser = ac.createAnalyser();
+      analyser.fftSize = 512;
+      src.connect(analyser);
+      const buf = new Uint8Array(analyser.fftSize);
+      this.micTimer = window.setInterval(() => {
+        analyser.getByteTimeDomainData(buf);
+        let peak = 0;
+        for (const v of buf) peak = Math.max(peak, Math.abs(v - 128));
+        this.cb.onDiag?.("micLevel", String(peak));
+      }, 500);
+    } catch {
+      /* noop */
+    }
+  }
+
+  private stopMicMeter() {
+    if (this.micTimer !== null) {
+      clearInterval(this.micTimer);
+      this.micTimer = null;
+    }
+    if (this.audioCtx) {
+      this.audioCtx.close().catch(() => {
+        /* noop */
+      });
+      this.audioCtx = null;
+    }
+  }
+
   private fail(code: string) {
     this.cb.onError?.(code);
     this.setState("error");
@@ -216,6 +256,7 @@ export class RealtimeSession {
   // 接続とマイクを確実に解放する（Stop / unload から呼ぶ）。
   stop(): void {
     this.setState("stopping");
+    this.stopMicMeter();
     try {
       this.dc?.close();
     } catch {
