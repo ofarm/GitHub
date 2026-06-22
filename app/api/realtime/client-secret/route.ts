@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { isAllowedEmail } from "@/lib/allowlist";
 import { safetyIdFor } from "@/lib/safetyId";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { extractClientSecret, extractExpiresAt } from "@/lib/openaiResponse";
 
 // ブラウザに渡す「短命 client secret(ek_...)」を発行するサーバー専用 API。
 // 非交渉制約:
@@ -90,27 +91,4 @@ export async function POST() {
     },
     { status: 200 },
   );
-}
-
-// レスポンス形状のゆれに防御的に対応（value / client_secret.value など）。
-function extractClientSecret(data: unknown): string | null {
-  if (!data || typeof data !== "object") return null;
-  const d = data as Record<string, unknown>;
-  if (typeof d.value === "string") return d.value;
-  const cs = d.client_secret;
-  if (cs && typeof cs === "object" && typeof (cs as Record<string, unknown>).value === "string") {
-    return (cs as Record<string, unknown>).value as string;
-  }
-  return null;
-}
-
-function extractExpiresAt(data: unknown): number | null {
-  if (!data || typeof data !== "object") return null;
-  const d = data as Record<string, unknown>;
-  if (typeof d.expires_at === "number") return d.expires_at;
-  const cs = d.client_secret;
-  if (cs && typeof cs === "object" && typeof (cs as Record<string, unknown>).expires_at === "number") {
-    return (cs as Record<string, unknown>).expires_at as number;
-  }
-  return null;
 }

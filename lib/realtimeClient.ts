@@ -27,6 +27,22 @@ export type RealtimeState =
 const REALTIME_BASE_URL =
   process.env.NEXT_PUBLIC_REALTIME_BASE_URL ?? "https://api.openai.com/v1/realtime/calls";
 
+// サーバーイベントから翻訳テキストの増分のみを抽出する純粋関数（テスト可能）。
+// ⚠️ verify: event.type の正確な名称は最新ドキュメントで確認。複数候補に防御的対応。
+// 戻り値が null の場合は「翻訳増分ではない」イベント（無視する）。
+export function extractDeltaText(evt: unknown): string | null {
+  if (!evt || typeof evt !== "object") return null;
+  const o = evt as Record<string, unknown>;
+  const type = typeof o.type === "string" ? o.type : "";
+  if (!type.endsWith(".delta")) return null;
+  if (typeof o.delta === "string") return o.delta;
+  if (o.delta && typeof o.delta === "object") {
+    const text = (o.delta as Record<string, unknown>).text;
+    if (typeof text === "string") return text;
+  }
+  return null;
+}
+
 export class RealtimeSession {
   private pc: RTCPeerConnection | null = null;
   private stream: MediaStream | null = null;
@@ -102,7 +118,6 @@ export class RealtimeSession {
   }
 
   // サーバーイベントを解釈し、翻訳テキストの増分のみ抽出する。
-  // ⚠️ verify: event.type の正確な名称は最新ドキュメントで確認。複数候補に防御的対応。
   private handleEvent(e: MessageEvent) {
     let evt: unknown;
     try {
@@ -110,16 +125,8 @@ export class RealtimeSession {
     } catch {
       return; // 本文をログせず黙って無視。
     }
-    if (!evt || typeof evt !== "object") return;
-    const o = evt as Record<string, unknown>;
-    const type = typeof o.type === "string" ? o.type : "";
-    // 翻訳/文字起こしの増分テキストを拾う（候補に防御的対応）。
-    if (type.endsWith(".delta") && typeof o.delta === "string") {
-      this.cb.onDelta(o.delta);
-    } else if (type.endsWith(".delta") && o.delta && typeof o.delta === "object") {
-      const text = (o.delta as Record<string, unknown>).text;
-      if (typeof text === "string") this.cb.onDelta(text);
-    }
+    const text = extractDeltaText(evt);
+    if (text !== null) this.cb.onDelta(text);
   }
 
   private fail(code: string) {

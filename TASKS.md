@@ -39,7 +39,7 @@
 ## 横断（Gate 5–7）
 | ID | チケット | ステータス | 受け入れ条件 |
 |---|---|---|---|
-| T5.1 | セキュリティレビュー | TODO | Critical/High ゼロ / security.md 該当 ✅ |
+| T5.1 | セキュリティレビュー | REVIEW | 静的レビュー完了・Critical/High なし（docs/security-review.md #1）。ランタイム項目は H-1〜H-4 待ち |
 | T5.2 | `npm audit` 対応 | REVIEW | high/critical は dev/build 依存の例外として記録（docs/security.md §18） |
 | T5.3 | iPhone 実機確認 | TODO | 許可・表示・解放・復帰再接続 OK（実OAuth/実キー必要） |
 | T5.4 | MVP リリース判定（GO/NO-GO） | TODO | 全受け入れ条件 + 全 Gate + 人間承認 |

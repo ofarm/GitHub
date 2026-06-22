@@ -25,10 +25,15 @@
   - iPhone 実機確認、ZDR/Modified Abuse Monitoring 申請状況(T4.3)。
 - audit: dev/build 推移依存の例外を docs/security.md §18 に記録。
 
+## 検証状況（2026-06-22 更新）
+- 単体テスト **27件 green**（allowlist/safetyId/rateLimit/delta抽出/レスポンスパーサ/**route認可**）。typecheck・build green。
+- Gate 5 静的セキュリティレビュー #1 完了（Critical/High なし）→ `docs/security-review.md`。
+- 人間の残作業は `docs/human-todo.md`（H-1〜H-8）に集約。
+
 ## 次のチケット（最大3件）
-1. T4.3: ZDR/Modified Abuse Monitoring の申請・対象エンドポイント確認（人間）。
-2. T2.1.2/T3.1.1 の `⚠️ verify` 箇所を実鍵で検証（人間 or 鍵保有環境）。
-3. T5.1 セキュリティレビュー → T5.3 実機 → T5.4 リリース判定。
+1. 人間: H-1（実 OAuth）/ H-2（OpenAI 実 wire 検証）/ H-3（ZDR 確認）。
+2. Agent 可能なら: 実機/実鍵フィードバックの反映、CSP connect-src 最小化（H-2 結果待ち）。
+3. T5.3 実機 → T5.4 リリース判定（人間承認）。
 
 ## 参照
 要件=docs/requirements / 設計=docs/architecture / セキュリティ=docs/security / データ=docs/privacy-data-handling / 戦略=docs/agent-strategy / バックログ=docs/backlog / リスク=docs/risks / チケット=TASKS.md。
