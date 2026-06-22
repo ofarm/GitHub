@@ -50,8 +50,16 @@ export default function TranslateClient() {
       onError: setErrorCode,
       onEvent: (info) =>
         setEventTypes((prev) => ({ ...prev, [info.type]: info.keys.join(", ") })),
+      onDiag: (label, value) => setEventTypes((prev) => ({ ...prev, [`#${label}`]: value })),
       onRemoteStream: (stream) => {
-        if (audioRef.current) audioRef.current.srcObject = stream;
+        if (audioRef.current) {
+          audioRef.current.srcObject = stream;
+          // 自動再生がブロックされることがあるため明示的に play() を試す。
+          audioRef.current
+            .play()
+            .then(() => setEventTypes((prev) => ({ ...prev, "#audioPlay": "ok" })))
+            .catch(() => setEventTypes((prev) => ({ ...prev, "#audioPlay": "blocked(手動再生して)" })));
+        }
       },
     });
     sessionRef.current = session;
@@ -91,8 +99,8 @@ export default function TranslateClient() {
           {errorMessage(errorCode)}
         </p>
       )}
-      {/* 翻訳音声の再生（モデルは日本語音声を生成する）。字幕と併用。 */}
-      <audio ref={audioRef} autoPlay />
+      {/* 翻訳音声の再生（モデルは日本語音声を生成する）。自動再生がブロックされた場合は手動で再生可能。 */}
+      <audio ref={audioRef} autoPlay playsInline controls style={{ width: "100%" }} />
       <Subtitles lines={lines} />
       {debug && (
         <div

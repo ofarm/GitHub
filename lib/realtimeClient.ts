@@ -17,6 +17,8 @@ export type RealtimeCallbacks = {
   onEvent?: (info: { type: string; keys: string[] }) => void;
   // 翻訳音声の再生用に、受信したリモート音声ストリームを渡す。
   onRemoteStream?: (stream: MediaStream) => void;
+  // 診断用: 接続状態など（label/value のメタ情報のみ）。
+  onDiag?: (label: string, value: string) => void;
 };
 
 export type RealtimeState =
@@ -106,6 +108,7 @@ export class RealtimeSession {
       // 接続確立後に session.update を明示送信して transcript 配信を有効化する。
       // （client_secret 側で設定済みでも、明示更新で transcript イベントが流れ出すことがある）
       dc.addEventListener("open", () => {
+        this.cb.onDiag?.("dataChannel", "open");
         try {
           dc.send(
             JSON.stringify({
@@ -122,10 +125,16 @@ export class RealtimeSession {
 
       // 翻訳音声のリモートトラックを受け取り、再生用に渡す。
       pc.addEventListener("track", (e) => {
+        this.cb.onDiag?.("remoteTrack", `received:${e.track.kind}`);
         if (e.streams && e.streams[0]) this.cb.onRemoteStream?.(e.streams[0]);
       });
 
+      pc.addEventListener("iceconnectionstatechange", () => {
+        this.cb.onDiag?.("ice", pc.iceConnectionState);
+      });
+
       pc.addEventListener("connectionstatechange", () => {
+        this.cb.onDiag?.("conn", pc.connectionState);
         if (pc.connectionState === "connected") this.setState("live");
         if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
           this.fail("CONNECTION_LOST");
