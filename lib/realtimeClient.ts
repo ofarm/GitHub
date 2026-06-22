@@ -15,6 +15,8 @@ export type RealtimeCallbacks = {
   onError?: (code: string) => void;
   // 診断用: 受信イベントの「種別名」と「キー名」のみ（値=本文は渡さない）。
   onEvent?: (info: { type: string; keys: string[] }) => void;
+  // 翻訳音声の再生用に、受信したリモート音声ストリームを渡す。
+  onRemoteStream?: (stream: MediaStream) => void;
 };
 
 export type RealtimeState =
@@ -97,6 +99,27 @@ export class RealtimeSession {
       const dc = pc.createDataChannel("oai-events");
       this.dc = dc;
       dc.addEventListener("message", (e) => this.handleEvent(e));
+      // 接続確立後に session.update を明示送信して transcript 配信を有効化する。
+      // （client_secret 側で設定済みでも、明示更新で transcript イベントが流れ出すことがある）
+      dc.addEventListener("open", () => {
+        try {
+          dc.send(
+            JSON.stringify({
+              type: "session.update",
+              session: {
+                audio: { input: { transcription: { model: "gpt-realtime-whisper" } } },
+              },
+            }),
+          );
+        } catch {
+          /* noop */
+        }
+      });
+
+      // 翻訳音声のリモートトラックを受け取り、再生用に渡す。
+      pc.addEventListener("track", (e) => {
+        if (e.streams && e.streams[0]) this.cb.onRemoteStream?.(e.streams[0]);
+      });
 
       pc.addEventListener("connectionstatechange", () => {
         if (pc.connectionState === "connected") this.setState("live");

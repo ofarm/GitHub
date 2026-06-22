@@ -21,6 +21,7 @@ export default function TranslateClient() {
   const [eventTypes, setEventTypes] = useState<Record<string, string>>({});
   const sessionRef = useRef<RealtimeSession | null>(null);
   const currentLineRef = useRef<string>("");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     setDebug(new URLSearchParams(window.location.search).has("debug"));
@@ -49,6 +50,9 @@ export default function TranslateClient() {
       onError: setErrorCode,
       onEvent: (info) =>
         setEventTypes((prev) => ({ ...prev, [info.type]: info.keys.join(", ") })),
+      onRemoteStream: (stream) => {
+        if (audioRef.current) audioRef.current.srcObject = stream;
+      },
     });
     sessionRef.current = session;
     await session.start();
@@ -87,6 +91,8 @@ export default function TranslateClient() {
           {errorMessage(errorCode)}
         </p>
       )}
+      {/* 翻訳音声の再生（モデルは日本語音声を生成する）。字幕と併用。 */}
+      <audio ref={audioRef} autoPlay />
       <Subtitles lines={lines} />
       {debug && (
         <div
