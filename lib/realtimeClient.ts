@@ -23,10 +23,11 @@ export type RealtimeState =
   | "stopping"
   | "error";
 
-// GA の SDP 交換エンドポイント。model は ek_(client secret) に束縛されるため
+// translate 専用の SDP 交換エンドポイント。model は ek_(client secret) に束縛されるため
 // クエリ ?model= は付けない（付けると 400 になる既知事象あり）。env で上書き可。
 const REALTIME_BASE_URL =
-  process.env.NEXT_PUBLIC_REALTIME_BASE_URL ?? "https://api.openai.com/v1/realtime/calls";
+  process.env.NEXT_PUBLIC_REALTIME_BASE_URL ??
+  "https://api.openai.com/v1/realtime/translations/calls";
 
 // サーバーイベントから翻訳テキストの増分のみを抽出する純粋関数（テスト可能）。
 // ⚠️ verify: event.type の正確な名称は最新ドキュメントで確認。複数候補に防御的対応。

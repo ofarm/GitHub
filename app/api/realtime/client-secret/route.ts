@@ -63,13 +63,15 @@ export async function POST() {
       },
       body: JSON.stringify({
         expires_after: { anchor: "created_at", seconds: ttl },
-        // translate セッション設定。出力言語は session.audio.output.language。
-        // ⚠️ verify: 入力 transcription/noise_reduction 等の任意キーは最新ドキュメントで確認。
+        // translate セッション設定（OpenAI cookbook の正式形に準拠）。
+        // 出力言語は session.audio.output.language。入力言語は自動判定。
         session: {
-          type: "realtime",
           model,
           audio: {
-            input: { transcription: { model: "gpt-realtime-whisper" } },
+            input: {
+              transcription: { model: "gpt-realtime-whisper" },
+              noise_reduction: { type: "near_field" },
+            },
             output: { language: targetLang },
           },
         },
