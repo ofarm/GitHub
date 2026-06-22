@@ -25,8 +25,10 @@ Agent は実鍵・実データを持てないため、ここに「人間にし�
   - 結果を `docs/privacy-data-handling.md` §6 のチェックに反映（断定表現にしない）。
 
 - [ ] **H-4 iPhone 実機確認**（→ T5.3）
-  - Safari でマイク許可 → 字幕表示 → Stop/タブ閉じで解放 → バックグラウンド復帰で再接続。
-  - 本番 HTTPS 環境で確認（getUserMedia は secure context 必須）。
+  - 手順: iPhone Safari で `https://git-hub-tan.vercel.app/` → Google ログイン → `/translate` → Start。
+  - チェック: ①マイク許可ダイアログが出る ②英語を話すと「マイク入力」バーが動く ③日本語字幕が出る ④Stop でマイク解放（上部の録音インジケータが消える）⑤Safari を一度バックグラウンドにして戻ると再接続できる（必要なら Start し直し）。
+  - 注意: getUserMedia は secure context 必須（本番 HTTPS なのでOK）。iOS は Start タップ起点でのみマイク取得可。会議音声を拾うには iPhone をスピーカー音源の近くに置く（ヘッドホン利用時は不可）。
+  - うまくいかない場合は `/translate?debug=1` の診断パネル（#micLevel など）を確認。
 
 ## 優先度: 中
 

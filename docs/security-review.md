@@ -39,3 +39,14 @@
 - 実 OAuth セッションでの CSRF（state/PKCE）動作確認。
 - 本番ヘッダ（HSTS/CSP）がブラウザに正しく適用されているか。
 - レート制限がデプロイ環境（サーバーレス多重インスタンス）で機能するか（必要ならエッジ KV へ）。
+
+## レビュー #2 — 2026-06-22（本番動作後・再点検）
+
+対象: 翻訳が本番動作した後の全コード（WebRTC/診断/音声トグル含む）。判定: **Critical/High なし**。
+
+- ✅ クライアントバンドルに秘密の**値**なし。`.next/static` の grep で `OPENAI_API_KEY` がヒットするが、これは UI エラーメッセージ内の**変数名の文字列**（"サーバーに OPENAI_API_KEY が未設定です…"）であり、値ではない。`sk-` トークン・`AUTH_SECRET`・`GOOGLE_SECRET`・`SAFETY_ID_SALT` はバンドルに**無し**。
+- ✅ `console.*` はサーバー route の client secret **発行段階のみ**（上流エラーの status/code）。音声送信前で会話本文は存在せず、§13 の許容例外に合致。クライアント側に `console.*` は無し。
+- ✅ storage 不使用、`dangerouslySetInnerHTML` 不使用（コメントのみ）。`NEXT_PUBLIC_` は非秘密の接続先 URL のみ。
+- ✅ 診断（onEvent/onDiag）は種別名・キー名・接続状態・音量レベルのみで、**本文は渡さない**。`?debug=1` 時のみ表示。
+- ✅ 翻訳音声は既定ミュート。字幕はメモリ state のみ（保存なし）。
+- 残課題（変更なし）: 実 HTTPS ヘッダ適用確認、レート制限の多重インスタンス挙動、H-3(ZDR)・H-4(iPhone)。

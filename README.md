@@ -40,6 +40,15 @@ OAuth は Google のテスト用クライアントを作成し、`AUTH_GOOGLE_ID
 
 ## 現状
 
-**Gate 0〜3 の実装が一巡**。認証(Auth.js+Google+allowlist)・client secret 発行 API・WebRTC 配線・字幕 UI まで実装済み。typecheck / build / 単体テスト(12) green。秘密・本文・storage の混入なしを確認済み。
+**コア機能（字幕翻訳）が本番で動作**。認証(Auth.js+Google+allowlist)・client secret 発行・WebRTC・**英→日リアルタイム字幕**まで本番(Vercel)で動作確認済み。単体テスト 27 / typecheck / build green。秘密・本文・storage の混入なしを確認済み（`docs/security-review.md` #2）。
 
-実鍵が必要な検証（実 OAuth ログイン、OpenAI の実 wire スキーマ、iPhone 実機、ZDR 申請）は**人間側の残作業**。詳細は `TASKS.md` 末尾と `docs/context-summary.md`。コードの `⚠️ verify` コメントが実鍵での確認ポイント。
+- **字幕メイン**。翻訳音声は既定オフ（トグルで任意再生）。
+- 会議音声を拾うため getUserMedia の音声処理（エコー除去等）は無効化。
+- 残: **H-3**(ZDR/データ保持の確認・`docs/privacy-data-handling.md §6.1`)、**H-4**(iPhone 実機)。詳細は `docs/human-todo.md`。
+
+## 使い方 / つまずきポイント
+
+1. ログイン → `/translate` → **Start** → マイク許可 → 英語音声 → 日本語字幕。
+2. **マイク入力バーが 0 のまま**なら Chrome が別マイクを使用 → `chrome://settings/content/microphone` で正しいデバイスへ。
+3. 会議を**ヘッドホン**で聞くとマイクが会議音声を拾えない。**スピーカー再生**にするか、将来のシステム音声取込対応を待つ。
+4. 不具合時は `/translate?debug=1` で受信イベント種別・接続状態の診断パネルを表示（本文は出さない）。
