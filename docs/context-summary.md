@@ -31,6 +31,13 @@
 - Gate 5 静的セキュリティレビュー #1 完了（Critical/High なし）→ `docs/security-review.md`。
 - 人間の残作業は `docs/human-todo.md`（H-1〜H-8）に集約。
 
+## H-2 デバッグ状況（2026-06-22）
+- サーバー（client secret 発行）は 200 で正常。WebRTC は conn/ice/dataChannel/remoteTrack/audioPlay すべて確立。
+- 症状: 翻訳の音声・字幕が出ない。`output_audio_buffer.started` は出るが中身が空。
+- 計測: 送信音声レベル(micLevel)が 0。OS のマイクは正常 → **Chrome が別マイクを使っている疑い**が最有力。
+- 対応: micLevel を `RTCRtpSender.getStats().audioLevel`（実送信レベル）に変更し本UIに常時表示。0なら Chrome のマイク選択、動くならモデル設定(turn_detection 等)の順で切り分ける。
+- 発行ボディは cookbook と完全一致（変更しない）。turn_detection は cookbook 非記載のため未追加（必要時に検証して追加）。
+
 ## 次のチケット（最大3件）
 1. 人間: H-1（実 OAuth）/ H-2（OpenAI 実 wire 検証）/ H-3（ZDR 確認）。
 2. Agent 可能なら: 実機/実鍵フィードバックの反映、CSP connect-src 最小化（H-2 結果待ち）。

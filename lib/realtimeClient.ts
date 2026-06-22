@@ -56,8 +56,7 @@ export class RealtimeSession {
   private stream: MediaStream | null = null;
   private dc: RTCDataChannel | null = null;
   private cb: RealtimeCallbacks;
-  private audioCtx: AudioContext | null = null;
-  private micTimer: number | null = null;
+  private statsTimer: number | null = null;
 
   constructor(cb: RealtimeCallbacks) {
     this.cb = cb;
@@ -91,14 +90,17 @@ export class RealtimeSession {
       // 2) マイク取得（ユーザー操作起点で呼ばれる前提 / iOS Safari 対応）。
       this.setState("connecting");
       this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      this.startMicMeter(this.stream);
 
-      // 3) PeerConnection 構築。
+      // 3) PeerConnection 構築。音声 sender を控えて送信レベルを計測する。
       const pc = new RTCPeerConnection();
       this.pc = pc;
+      let audioSender: RTCRtpSender | null = null;
       for (const track of this.stream.getTracks()) {
-        pc.addTrack(track, this.stream);
+        const sender = pc.addTrack(track, this.stream);
+        if (track.kind === "audio") audioSender = sender;
       }
+      // 実際に WebRTC で送信中の音声レベルを計測（OpenAI に音声が届いているかの正解値）。
+      this.startLevelMeter(audioSender, this.stream);
 
       // 4) data channel（サーバーイベント受信）。
       const dc = pc.createDataChannel("oai-events");
@@ -210,48 +212,44 @@ export class RealtimeSession {
     if (text !== null) this.cb.onDelta(text);
   }
 
-  // マイク入力レベルの簡易メータ（診断）。本文ではなく音量ピーク値のみを通知。
-  // 話したときに値が動く=マイクは拾えている。0付近のまま=マイクが無音。
-  private startMicMeter(stream: MediaStream) {
-    try {
-      const Ctx =
-        window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const ac = new Ctx();
-      this.audioCtx = ac;
-      // AudioContext は suspended で始まることがあるため明示的に resume する。
-      ac.resume().catch(() => {
-        /* noop */
-      });
-      const src = ac.createMediaStreamSource(stream);
-      const analyser = ac.createAnalyser();
-      analyser.fftSize = 512;
-      src.connect(analyser);
-      const buf = new Uint8Array(analyser.fftSize);
-      // 送信中マイクトラックが有効か（無効/ミュートなら無音送信）。
-      const track = stream.getAudioTracks()[0];
-      this.cb.onDiag?.("micTrack", track ? `${track.label || "mic"}/enabled:${track.enabled}` : "none");
-      this.micTimer = window.setInterval(() => {
-        analyser.getByteTimeDomainData(buf);
-        let peak = 0;
-        for (const v of buf) peak = Math.max(peak, Math.abs(v - 128));
-        this.cb.onDiag?.("micLevel", String(peak));
-        this.cb.onDiag?.("micCtx", ac.state);
-      }, 500);
-    } catch {
-      /* noop */
+  // 送信中の音声レベルを RTCRtpSender.getStats() の audioLevel から計測する。
+  // これは「実際に OpenAI へ送られている音声」のレベルなので、AudioContext の
+  // suspended 等に左右されない。0付近のまま=無音が送られている（マイク選択の問題）。
+  private startLevelMeter(sender: RTCRtpSender | null, stream: MediaStream) {
+    // どのマイクデバイスが選ばれ、トラックが有効/ミュートかを診断表示。
+    const track = stream.getAudioTracks()[0];
+    if (track) {
+      this.cb.onDiag?.(
+        "micTrack",
+        `${track.label || "mic"} enabled:${track.enabled} muted:${track.muted}`,
+      );
+      track.addEventListener("mute", () => this.cb.onDiag?.("micTrackState", "muted"));
+      track.addEventListener("unmute", () => this.cb.onDiag?.("micTrackState", "unmuted"));
     }
+    if (!sender) return;
+    this.statsTimer = window.setInterval(async () => {
+      try {
+        const stats = await sender.getStats();
+        let level: number | undefined;
+        stats.forEach((r) => {
+          const a = r as unknown as { type: string; kind?: string; audioLevel?: number };
+          if (a.type === "media-source" && a.kind === "audio" && typeof a.audioLevel === "number") {
+            level = a.audioLevel;
+          }
+        });
+        if (typeof level === "number") {
+          this.cb.onDiag?.("micLevel", String(Math.round(level * 1000)));
+        }
+      } catch {
+        /* noop */
+      }
+    }, 400);
   }
 
-  private stopMicMeter() {
-    if (this.micTimer !== null) {
-      clearInterval(this.micTimer);
-      this.micTimer = null;
-    }
-    if (this.audioCtx) {
-      this.audioCtx.close().catch(() => {
-        /* noop */
-      });
-      this.audioCtx = null;
+  private stopLevelMeter() {
+    if (this.statsTimer !== null) {
+      clearInterval(this.statsTimer);
+      this.statsTimer = null;
     }
   }
 
@@ -264,7 +262,7 @@ export class RealtimeSession {
   // 接続とマイクを確実に解放する（Stop / unload から呼ぶ）。
   stop(): void {
     this.setState("stopping");
-    this.stopMicMeter();
+    this.stopLevelMeter();
     try {
       this.dc?.close();
     } catch {

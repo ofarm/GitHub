@@ -11,11 +11,24 @@ import { Subtitles } from "@/components/Subtitles";
 //  - Stop / unload で接続とマイクを確実に解放。
 
 const MAX_LINES = 50; // 表示行の上限（メモリのみ・保存しない）。
+const MIC_ACTIVE = 5; // この値を超えたら「音声を検出」とみなす。
+
+const stateLabel: Record<RealtimeState, string> = {
+  idle: "停止中",
+  requesting: "準備中…",
+  connecting: "接続中…",
+  live: "接続中（話してください）",
+  stopping: "停止処理中…",
+  error: "エラー",
+};
 
 export default function TranslateClient() {
   const [state, setState] = useState<RealtimeState>("idle");
   const [lines, setLines] = useState<string[]>([]);
   const [errorCode, setErrorCode] = useState<string | null>(null);
+  // マイク入力レベル（0〜128程度）。本UIに常時表示し、無音を即検知できるようにする。
+  const [micLevel, setMicLevel] = useState(0);
+  const [micPeak, setMicPeak] = useState(0); // Start 以降の最大値（無音判定用）。
   // 診断: ?debug=1 のときだけ受信イベント種別/キーを表示（値=本文は持たない）。
   const [debug, setDebug] = useState(false);
   const [eventTypes, setEventTypes] = useState<Record<string, string>>({});
@@ -44,21 +57,30 @@ export default function TranslateClient() {
 
   const start = useCallback(async () => {
     setErrorCode(null);
+    setMicLevel(0);
+    setMicPeak(0);
+    setEventTypes({});
     const session = new RealtimeSession({
       onDelta: appendDelta,
       onStateChange: setState,
       onError: setErrorCode,
       onEvent: (info) =>
         setEventTypes((prev) => ({ ...prev, [info.type]: info.keys.join(", ") })),
-      onDiag: (label, value) => setEventTypes((prev) => ({ ...prev, [`#${label}`]: value })),
+      onDiag: (label, value) => {
+        if (label === "micLevel") {
+          const lvl = Number(value) || 0;
+          setMicLevel(lvl);
+          setMicPeak((p) => Math.max(p, lvl));
+        }
+        setEventTypes((prev) => ({ ...prev, [`#${label}`]: value }));
+      },
       onRemoteStream: (stream) => {
         if (audioRef.current) {
           audioRef.current.srcObject = stream;
-          // 自動再生がブロックされることがあるため明示的に play() を試す。
           audioRef.current
             .play()
             .then(() => setEventTypes((prev) => ({ ...prev, "#audioPlay": "ok" })))
-            .catch(() => setEventTypes((prev) => ({ ...prev, "#audioPlay": "blocked(手動再生して)" })));
+            .catch(() => setEventTypes((prev) => ({ ...prev, "#audioPlay": "blocked" })));
         }
       },
     });
@@ -91,17 +113,69 @@ export default function TranslateClient() {
     };
   }, []);
 
+  const isActive = state === "connecting" || state === "live";
+  const micSilent = state === "live" && micPeak < MIC_ACTIVE;
+
   return (
     <>
       <Controls state={state} onStart={start} onStop={stop} onClear={clear} />
+
       {errorCode && (
         <p style={{ color: "var(--danger)" }} role="alert">
           {errorMessage(errorCode)}
         </p>
       )}
-      {/* 翻訳音声の再生（モデルは日本語音声を生成する）。自動再生がブロックされた場合は手動で再生可能。 */}
+
+      {/* 接続・マイクの状態を本UIに常時表示（デバッグモード不要で原因が見える）。 */}
+      {isActive && (
+        <div
+          style={{
+            background: "rgba(255,255,255,0.04)",
+            borderRadius: 10,
+            padding: 12,
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+          }}
+        >
+          <div style={{ fontSize: 13, color: "var(--muted)" }}>{stateLabel[state]}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 13, minWidth: 84 }}>マイク入力</span>
+            <div
+              style={{
+                flex: 1,
+                height: 10,
+                background: "rgba(255,255,255,0.08)",
+                borderRadius: 6,
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  width: `${Math.min(100, micLevel * 1.6)}%`,
+                  height: "100%",
+                  background: micLevel > MIC_ACTIVE ? "#39d98a" : "var(--muted)",
+                  transition: "width 120ms linear",
+                }}
+              />
+            </div>
+          </div>
+          {micSilent && (
+            <p style={{ color: "var(--danger)", fontSize: 13, margin: 0 }}>
+              🎤 マイク音声が送信されていません（送信レベル0）。OS のマイクが正常でもこの状態なら、
+              <b>Chrome が別のマイクを使っている</b>可能性が高いです。アドレスバー右の🎤アイコン、または
+              <code> chrome://settings/content/microphone </code>
+              で「マイク」が正しいデバイスになっているか確認し、Start し直してください。
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* 翻訳音声の再生（モデルは日本語音声を生成）。聞こえない場合は▶で手動再生。 */}
       <audio ref={audioRef} autoPlay playsInline controls style={{ width: "100%" }} />
+
       <Subtitles lines={lines} />
+
       {debug && (
         <div
           style={{
