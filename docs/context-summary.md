@@ -31,6 +31,10 @@
 - Gate 5 静的セキュリティレビュー #1 完了（Critical/High なし）→ `docs/security-review.md`。
 - 人間の残作業は `docs/human-todo.md`（H-1〜H-8）に集約。
 
+## マイルストーン: MVP コア完成（2026-06-22）
+- PC・**iPhone Safari の両方**で 英→日 リアルタイム字幕が本番動作（H-1/H-2/H-4 完了）。
+- 残: H-3（ZDR/データ保持の判断・記録）のみ。コードは安定、セキュリティレビュー#2 済み。
+
 ## H-2 完了（2026-06-22）— 翻訳が本番で動作
 - 英→日の字幕・音声ともに本番(git-hub-tan.vercel.app)で動作確認。
 - 確定した実 wire: 発行=`/v1/realtime/translations/client_secrets`（cookbook 形ボディ・session.audio.output.language=ja）、SDP=`/v1/realtime/translations/calls`、翻訳テキスト=`session.output_transcript.delta`(delta)。

@@ -24,7 +24,7 @@ Agent は実鍵・実データを持てないため、ここに「人間にし�
   - `gpt-realtime-translate` が対象エンドポイントに含まれるか。
   - 結果を `docs/privacy-data-handling.md` §6 のチェックに反映（断定表現にしない）。
 
-- [ ] **H-4 iPhone 実機確認**（→ T5.3）
+- [x] **H-4 iPhone 実機確認**（→ T5.3）
   - 手順: iPhone Safari で `https://git-hub-tan.vercel.app/` → Google ログイン → `/translate` → Start。
   - チェック: ①マイク許可ダイアログが出る ②英語を話すと「マイク入力」バーが動く ③日本語字幕が出る ④Stop でマイク解放（上部の録音インジケータが消える）⑤Safari を一度バックグラウンドにして戻ると再接続できる（必要なら Start し直し）。
   - 注意: getUserMedia は secure context 必須（本番 HTTPS なのでOK）。iOS は Start タップ起点でのみマイク取得可。会議音声を拾うには iPhone をスピーカー音源の近くに置く（ヘッドホン利用時は不可）。
@@ -51,5 +51,6 @@ Agent は実鍵・実データを持てないため、ここに「人間にし�
 
 - H-1: ✅ 2026-06-22 本番 https://git-hub-tan.vercel.app/ で Google ログイン→/translate 到達を確認。allowlist 認可が本番動作。
 - H-2: ✅ 2026-06-22 英語→日本語の字幕・音声ともに本番動作を確認。発行ボディは cookbook 形に修正、SDP は /translations/calls。詰まり原因は Chrome のマイク選択（OSは正常でも別デバイス）→ Chrome 側でマイク変更で解決。
+- H-4: ✅ 2026-06-22 iPhone Safari で本番URLにログイン→/translate→日本語字幕の表示を確認。PC/iPhone 両対応を達成。
 - H-3: （未）
 - H-4: （未）

@@ -41,7 +41,7 @@
 |---|---|---|---|
 | T5.1 | セキュリティレビュー | REVIEW | レビュー #1/#2 完了・Critical/High なし（docs/security-review.md）。残: 実HTTPSヘッダ/レート制限多重・H-3/H-4 |
 | T5.2 | `npm audit` 対応 | REVIEW | high/critical は dev/build 依存の例外として記録（docs/security.md §18） |
-| T5.3 | iPhone 実機確認 | TODO | 許可・表示・解放・復帰再接続 OK（実OAuth/実キー必要） |
+| T5.3 | iPhone 実機確認 | DONE | iPhone Safari で本番ログイン→/translate→日本語字幕の表示を確認 |
 | T5.4 | MVP リリース判定（GO/NO-GO） | TODO | 全受け入れ条件 + 全 Gate + 人間承認 |
 
 > ⚠️ **人間が実鍵で確認すべき残作業**: 実 Google OAuth でのログイン E2E、OpenAI 実 wire スキーマ（client_secrets ボディ / SDP URL / event 名）の検証、iPhone 実機、ZDR 申請状況(T4.3)。Agent は実鍵を持たないため設計・配線まで完了。
