@@ -34,7 +34,7 @@
 - FR-2: 認証済みでも `ALLOWED_EMAILS` 外は 403 相当で拒否（セッションを張らない）。
 - FR-3: client secret 発行 API は短命トークンのみ返し、標準キーを返さない。
 - FR-4: Start で WebRTC 接続を確立し、マイク音声を送信する。
-- FR-5: 受信した日本語 delta を逐次字幕表示する（最新行を強調）。
+- FR-5: 受信した日本語訳(`session.output_transcript.delta`)と英語原文(`session.input_transcript.delta`)を逐次・**併記**で字幕表示する（英語=小/淡色、日本語=大、最新行を強調）。
 - FR-6: Stop でマイク（MediaStream トラック）と PeerConnection を解放する。
 - FR-7: Clear で画面上の字幕を消す（メモリ上のみ、保存しない）。
 - FR-8: ページ unload 時に接続とマイクを解放する。

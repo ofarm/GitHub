@@ -9,8 +9,11 @@
 // ⚠️ verify: SDP 送信先 URL とサーバーイベントの正確な type 名は最新公式ドキュメントで要確認。
 //    env: NEXT_PUBLIC_REALTIME_BASE_URL で上書き可能（秘密情報ではない接続先のみ）。
 
+// 字幕の種別: source=英語原文 / translation=日本語訳。
+export type DeltaKind = "source" | "translation";
+
 export type RealtimeCallbacks = {
-  onDelta: (text: string) => void; // 翻訳テキストの増分
+  onDelta: (kind: DeltaKind, text: string) => void; // 字幕テキストの増分（種別付き）
   onStateChange?: (state: RealtimeState) => void;
   onError?: (code: string) => void;
   // 診断用: 受信イベントの「種別名」と「キー名」のみ（値=本文は渡さない）。
@@ -35,20 +38,26 @@ const REALTIME_BASE_URL =
   process.env.NEXT_PUBLIC_REALTIME_BASE_URL ??
   "https://api.openai.com/v1/realtime/translations/calls";
 
-// サーバーイベントから翻訳テキストの増分のみを抽出する純粋関数（テスト可能）。
-// ⚠️ verify: event.type の正確な名称は最新ドキュメントで確認。複数候補に防御的対応。
-// 戻り値が null の場合は「翻訳増分ではない」イベント（無視する）。
-export function extractDeltaText(evt: unknown): string | null {
+// サーバーイベントから字幕テキストの増分を、種別付きで抽出する純粋関数（テスト可能）。
+// - session.input_transcript.delta / input_audio_transcription → source（英語原文）
+// - session.output_transcript.delta / (output_)audio_transcript → translation（日本語訳）
+// 戻り値が null の場合は「字幕増分ではない」イベント（無視する）。
+export function extractDelta(evt: unknown): { kind: DeltaKind; text: string } | null {
   if (!evt || typeof evt !== "object") return null;
   const o = evt as Record<string, unknown>;
   const type = typeof o.type === "string" ? o.type : "";
   if (!type.endsWith(".delta")) return null;
-  if (typeof o.delta === "string") return o.delta;
-  if (o.delta && typeof o.delta === "object") {
-    const text = (o.delta as Record<string, unknown>).text;
-    if (typeof text === "string") return text;
+
+  let text: string | null = null;
+  if (typeof o.delta === "string") text = o.delta;
+  else if (o.delta && typeof o.delta === "object") {
+    const t = (o.delta as Record<string, unknown>).text;
+    if (typeof t === "string") text = t;
   }
-  return null;
+  if (text === null) return null;
+
+  const isSource = type.includes("input_transcript") || type.includes("input_audio_transcription");
+  return { kind: isSource ? "source" : "translation", text };
 }
 
 export class RealtimeSession {
@@ -212,8 +221,8 @@ export class RealtimeSession {
         keys: Object.keys(o),
       });
     }
-    const text = extractDeltaText(evt);
-    if (text !== null) this.cb.onDelta(text);
+    const d = extractDelta(evt);
+    if (d !== null) this.cb.onDelta(d.kind, d.text);
   }
 
   // 送信中の音声レベルを RTCRtpSender.getStats() の audioLevel から計測する。

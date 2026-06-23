@@ -19,10 +19,12 @@ Agent は実鍵・実データを持てないため、ここに「人間にし�
   - ブラウザの SDP 送信先 URL（`NEXT_PUBLIC_REALTIME_BASE_URL`）と data channel の event `type` 名を確認し、`lib/realtimeClient.ts` を調整。
   - 確認: 英語を話して日本語字幕が出ること、レスポンスに標準キーが含まれないこと。
 
-- [ ] **H-3 ZDR / Modified Abuse Monitoring の状況確認**（→ T4.3）
-  - 使用組織/プロジェクトで ZDR または Modified Abuse Monitoring が承認済みか。
-  - `gpt-realtime-translate` が対象エンドポイントに含まれるか。
-  - 結果を `docs/privacy-data-handling.md` §6 のチェックに反映（断定表現にしない）。
+- [ ] **H-3 ZDR / Modified Abuse Monitoring の申請（方針: B＝申請する）**（→ T4.3）
+  - 決定: 既定許容(A)ではなく、**申請して厳格化(B)** を選択。デスク作業の時間が取れ次第実施。
+  - 手順: OpenAI 営業/サポート or ダッシュボードから ZDR もしくは Modified Abuse Monitoring を申請（**セルフサービス不可・承認制**）。
+  - 申請時に必ず確認: **Realtime / `gpt-realtime-translate` / `gpt-realtime-whisper` が対象エンドポイントに含まれるか**。
+  - 承認後: 組織/プロジェクトで有効化し、結果を `docs/privacy-data-handling.md §6.1` と下の記録欄に反映。
+  - 暫定（承認までの間）: 既定（学習不使用＋最大30日 abuse 保持）で運用していることを認識しておく。
 
 - [x] **H-4 iPhone 実機確認**（→ T5.3）
   - 手順: iPhone Safari で `https://git-hub-tan.vercel.app/` → Google ログイン → `/translate` → Start。

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { RealtimeSession, type RealtimeState } from "@/lib/realtimeClient";
+import { RealtimeSession, type DeltaKind, type RealtimeState } from "@/lib/realtimeClient";
 import { Controls } from "@/components/Controls";
 import { Subtitles } from "@/components/Subtitles";
 
@@ -24,7 +24,9 @@ const stateLabel: Record<RealtimeState, string> = {
 
 export default function TranslateClient() {
   const [state, setState] = useState<RealtimeState>("idle");
-  const [lines, setLines] = useState<string[]>([]);
+  // 英語原文(en)と日本語訳(ja)を併記表示するため2系統で保持。
+  const [jaLines, setJaLines] = useState<string[]>([]);
+  const [enLines, setEnLines] = useState<string[]>([]);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   // マイク入力レベル（0〜128程度）。本UIに常時表示し、無音を即検知できるようにする。
   const [micLevel, setMicLevel] = useState(0);
@@ -35,7 +37,8 @@ export default function TranslateClient() {
   const [debug, setDebug] = useState(false);
   const [eventTypes, setEventTypes] = useState<Record<string, string>>({});
   const sessionRef = useRef<RealtimeSession | null>(null);
-  const currentLineRef = useRef<string>("");
+  const curJaRef = useRef<string>("");
+  const curEnRef = useRef<string>("");
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -47,18 +50,20 @@ export default function TranslateClient() {
     if (audioRef.current) audioRef.current.muted = !playAudio;
   }, [playAudio]);
 
-  const appendDelta = useCallback((text: string) => {
-    // 増分を現在行に連結。改行で行を確定。本文はログしない。
-    currentLineRef.current += text;
-    setLines((prev) => {
+  const appendDelta = useCallback((kind: DeltaKind, text: string) => {
+    // 増分を該当系統の現在行に連結。改行で行を確定。本文はログしない。
+    const setter = kind === "translation" ? setJaLines : setEnLines;
+    const curRef = kind === "translation" ? curJaRef : curEnRef;
+    curRef.current += text;
+    setter((prev) => {
       const next = [...prev];
       if (next.length === 0) next.push("");
-      next[next.length - 1] = currentLineRef.current;
+      next[next.length - 1] = curRef.current;
       return next.slice(-MAX_LINES);
     });
     if (text.includes("\n")) {
-      currentLineRef.current = "";
-      setLines((prev) => [...prev, ""].slice(-MAX_LINES));
+      curRef.current = "";
+      setter((prev) => [...prev, ""].slice(-MAX_LINES));
     }
   }, []);
 
@@ -67,6 +72,10 @@ export default function TranslateClient() {
     setMicLevel(0);
     setMicPeak(0);
     setEventTypes({});
+    curJaRef.current = "";
+    curEnRef.current = "";
+    setJaLines([]);
+    setEnLines([]);
     const session = new RealtimeSession({
       onDelta: appendDelta,
       onStateChange: setState,
@@ -101,8 +110,10 @@ export default function TranslateClient() {
   }, []);
 
   const clear = useCallback(() => {
-    currentLineRef.current = "";
-    setLines([]);
+    curJaRef.current = "";
+    curEnRef.current = "";
+    setJaLines([]);
+    setEnLines([]);
   }, []);
 
   // ページ離脱 / バックグラウンドで確実に解放（iOS Safari は pagehide が確実）。
@@ -181,7 +192,7 @@ export default function TranslateClient() {
       {/* 翻訳音声は既定で無音（字幕メイン）。トグルで任意に再生可能。 */}
       <audio ref={audioRef} autoPlay playsInline muted style={{ display: "none" }} />
 
-      <Subtitles lines={lines} />
+      <Subtitles jaLines={jaLines} enLines={enLines} />
 
       <label
         style={{

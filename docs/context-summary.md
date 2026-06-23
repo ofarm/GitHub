@@ -33,7 +33,8 @@
 
 ## マイルストーン: MVP コア完成（2026-06-22）
 - PC・**iPhone Safari の両方**で 英→日 リアルタイム字幕が本番動作（H-1/H-2/H-4 完了）。
-- 残: H-3（ZDR/データ保持の判断・記録）のみ。コードは安定、セキュリティレビュー#2 済み。
+- **併記表示**追加: 英語原文(input_transcript)と日本語訳(output_transcript)を種別で振り分け2段表示。英語表示で whisper 入力文字起こし分の課金が増える点に留意（cost-estimation 参照）。
+- 残: **H-3 は方針B（ZDR/Modified Abuse Monitoring を申請）に決定・時間が取れ次第実施**（human-todo H-3）。コードは安定、セキュリティレビュー#2 済み。
 
 ## H-2 完了（2026-06-22）— 翻訳が本番で動作
 - 英→日の字幕・音声ともに本番(git-hub-tan.vercel.app)で動作確認。
