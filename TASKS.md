@@ -39,7 +39,7 @@
 ## Phase V1 — 実用化（会議1本を完走できる）※詳細= docs/roadmap-v1.md
 | ID | チケット | ステータス | 担当モデル | 受け入れ条件（要約） |
 |---|---|---|---|---|
-| V1.1 | タブ切替で切断しない（visibilitychange の stop 撤去） | TODO | Haiku可 | 別タブでも字幕継続 / タブ閉じで解放 |
+| V1.1 | タブ切替で切断しない（visibilitychange の stop 撤去） | DONE | Haiku可 | 別タブでも字幕継続 / タブ閉じで解放 |
 | V1.2 | Screen Wake Lock | TODO | Haiku可 | live中スリープしない / stopで解放 / 非対応で無害 |
 | V1.3 | 自動再接続（最大3回・バックオフ・字幕保持） | TODO | 中モデル | 瞬断から自動復帰 / Stopで確実に停止 |
 | V1.4 | 長時間セッション検証・上限対応（⚠️verify） | TODO | 中+人間 | 60分連続稼働で字幕が途切れない |

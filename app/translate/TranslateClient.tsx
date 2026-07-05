@@ -116,17 +116,13 @@ export default function TranslateClient() {
     setEnLines([]);
   }, []);
 
-  // ページ離脱 / バックグラウンドで確実に解放（iOS Safari は pagehide が確実）。
+  // ページ離脱時に確実に解放（pagehide のみ）。
+  // 注: visibilitychange:hidden は削除。タブ切替時は接続を保持し、pagehide(タブ閉じ)で初めて解放する。
   useEffect(() => {
     const release = () => sessionRef.current?.stop();
     window.addEventListener("pagehide", release);
-    const onVisibility = () => {
-      if (document.visibilityState === "hidden") release();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       window.removeEventListener("pagehide", release);
-      document.removeEventListener("visibilitychange", onVisibility);
       sessionRef.current?.stop();
     };
   }, []);

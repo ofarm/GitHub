@@ -47,9 +47,9 @@
 - 実装は Haiku 級に引き継ぐ（roadmap-v1.md 末尾の運用ルールに従う。1実行=1チケット）。
 
 ## 次のチケット（最大3件）
-1. V1.1 タブ切替で切断しない（Haiku可・TranslateClient.tsx のみ）。
-2. V1.2 Screen Wake Lock（Haiku可）。
-3. V1.5 無音自動停止 → V1.6 経過時間表示（Haiku可）。その後 V1.3/V1.4 は中モデル+人間テスト。
+1. V1.2 Screen Wake Lock（Haiku可）。
+2. V1.5 無音自動停止（Haiku可）。
+3. V1.6 経過時間・概算コスト表示（Haiku可）。その後 V1.3/V1.4 は中モデル+人間テスト。
 
 ## 参照
 要件=docs/requirements / 設計=docs/architecture / セキュリティ=docs/security / データ=docs/privacy-data-handling / 戦略=docs/agent-strategy / バックログ=docs/backlog / リスク=docs/risks / チケット=TASKS.md。
