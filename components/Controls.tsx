@@ -14,12 +14,14 @@ const labelByState: Record<RealtimeState, string> = {
   requesting: "準備中…",
   connecting: "接続中…",
   live: "翻訳中",
+  reconnecting: "再接続中…",
   stopping: "停止処理中…",
   error: "エラー",
 };
 
 export function Controls({ state, onStart, onStop, onClear }: Props) {
-  const isActive = state === "requesting" || state === "connecting" || state === "live";
+  const isActive =
+    state === "requesting" || state === "connecting" || state === "live" || state === "reconnecting";
 
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>

@@ -29,8 +29,13 @@ export type RealtimeState =
   | "requesting"
   | "connecting"
   | "live"
+  | "reconnecting"
   | "stopping"
   | "error";
+
+// 自動再接続の設定（瞬断からの復帰用）。字幕は保持したまま接続だけ張り直す。
+const MAX_RECONNECT_ATTEMPTS = 3;
+const RECONNECT_BACKOFF_MS = [2000, 4000, 8000];
 
 // translate 専用の SDP 交換エンドポイント。model は ek_(client secret) に束縛されるため
 // クエリ ?model= は付けない（付けると 400 になる既知事象あり）。env で上書き可。
@@ -66,6 +71,13 @@ export class RealtimeSession {
   private dc: RTCDataChannel | null = null;
   private cb: RealtimeCallbacks;
   private statsTimer: number | null = null;
+  // 再接続の管理。手動 Stop 時は再接続を一切行わない。
+  private manualStop = false;
+  private isReconnecting = false;
+  private reconnectAttempts = 0;
+  private reconnectTimer: number | null = null;
+  // 1回の接続試行につき、失敗ハンドラの多重発火を防ぐガード。
+  private failureHandled = false;
 
   constructor(cb: RealtimeCallbacks) {
     this.cb = cb;
@@ -76,10 +88,21 @@ export class RealtimeSession {
   }
 
   async start(): Promise<void> {
+    this.manualStop = false;
+    this.isReconnecting = false;
+    this.reconnectAttempts = 0;
+    await this.connectOnce(false);
+  }
+
+  // 接続確立の1回分。isRetry=true の場合は再接続試行中であり、
+  // state を "reconnecting" のまま維持する（"requesting"/"connecting" に戻さない）。
+  private async connectOnce(isRetry: boolean): Promise<void> {
+    this.failureHandled = false;
     try {
-      this.setState("requesting");
+      if (!isRetry) this.setState("requesting");
       // 1) 自サーバから短命 client secret を取得（cookie 認証付き）。
       const res = await fetch("/api/realtime/client-secret", { method: "POST" });
+      if (this.manualStop) return;
       if (!res.ok) {
         // サーバーの正規化エラーコードをそのまま前面化（本文は含まない）。
         let code = "SECRET_FETCH_FAILED";
@@ -91,21 +114,31 @@ export class RealtimeSession {
         } catch {
           /* 本文を読めない場合はコードのみ */
         }
-        this.fail(upstream ? `${code} (上流:${upstream})` : code);
+        this.handleAttemptFailure(upstream ? `${code} (上流:${upstream})` : code);
         return;
       }
       const { clientSecret } = (await res.json()) as { clientSecret: string };
+      if (this.manualStop) return;
 
       // 2) マイク取得（ユーザー操作起点で呼ばれる前提 / iOS Safari 対応）。
       // 会議などの周囲音声を拾いやすくするため、エコー除去/ノイズ抑制/自動ゲインを無効化。
       // （スピーカーから出る相手の声を拾う用途。ヘッドホン利用時は別途システム音声取込が必要）
-      this.setState("connecting");
-      this.stream = await navigator.mediaDevices.getUserMedia({
+      if (!isRetry) this.setState("connecting");
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
       });
+      if (this.manualStop) {
+        for (const track of stream.getTracks()) track.stop();
+        return;
+      }
+      this.stream = stream;
 
       // 3) PeerConnection 構築。音声 sender を控えて送信レベルを計測する。
       const pc = new RTCPeerConnection();
+      if (this.manualStop) {
+        pc.close();
+        return;
+      }
       this.pc = pc;
       let audioSender: RTCRtpSender | null = null;
       for (const track of this.stream.getTracks()) {
@@ -126,6 +159,7 @@ export class RealtimeSession {
       // 接続確立後に session.update を明示送信して transcript 配信を有効化する。
       // （client_secret 側で設定済みでも、明示更新で transcript イベントが流れ出すことがある）
       dc.addEventListener("open", () => {
+        if (this.dc !== dc) return;
         this.cb.onDiag?.("dataChannel", "open");
         try {
           dc.send(
@@ -143,25 +177,36 @@ export class RealtimeSession {
 
       // 翻訳音声のリモートトラックを受け取り、再生用に渡す。
       pc.addEventListener("track", (e) => {
+        if (this.pc !== pc) return;
         this.cb.onDiag?.("remoteTrack", `received:${e.track.kind}`);
         if (e.streams && e.streams[0]) this.cb.onRemoteStream?.(e.streams[0]);
       });
 
       pc.addEventListener("iceconnectionstatechange", () => {
+        if (this.pc !== pc) return;
         this.cb.onDiag?.("ice", pc.iceConnectionState);
+        if (pc.iceConnectionState === "failed") {
+          this.handleAttemptFailure("CONNECTION_LOST");
+        }
       });
 
       pc.addEventListener("connectionstatechange", () => {
+        if (this.pc !== pc) return;
         this.cb.onDiag?.("conn", pc.connectionState);
-        if (pc.connectionState === "connected") this.setState("live");
+        if (pc.connectionState === "connected") {
+          this.isReconnecting = false;
+          this.reconnectAttempts = 0;
+          this.setState("live");
+        }
         if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
-          this.fail("CONNECTION_LOST");
+          this.handleAttemptFailure("CONNECTION_LOST");
         }
       });
 
       // 5) SDP 交換。
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+      if (this.manualStop) return;
 
       const sdpRes = await fetch(REALTIME_BASE_URL, {
         method: "POST",
@@ -171,8 +216,9 @@ export class RealtimeSession {
           "Content-Type": "application/sdp",
         },
       });
+      if (this.manualStop) return;
       if (!sdpRes.ok) {
-        this.fail(`SDP_EXCHANGE_FAILED (${sdpRes.status})`);
+        this.handleAttemptFailure(`SDP_EXCHANGE_FAILED (${sdpRes.status})`);
         return;
       }
       const answer = { type: "answer" as const, sdp: await sdpRes.text() };
@@ -180,8 +226,43 @@ export class RealtimeSession {
       // connectionstatechange で live に遷移。
     } catch {
       // 例外本文をログしない（種別のみ）。
-      this.fail("START_FAILED");
+      if (!this.manualStop) this.handleAttemptFailure("START_FAILED");
     }
+  }
+
+  // 接続試行の失敗を一元処理する。
+  // - 既にライブ経験がある切断(CONNECTION_LOST)、または既に再接続シーケンス中の失敗は再接続対象。
+  // - それ以外（初回接続時の認証/SDPエラー等）は即座にエラー表示（既存挙動を維持）。
+  private handleAttemptFailure(code: string): void {
+    if (this.manualStop || this.failureHandled) return;
+    this.failureHandled = true;
+    const retryEligible = this.isReconnecting || code === "CONNECTION_LOST";
+    if (retryEligible) {
+      this.scheduleReconnect(code);
+    } else {
+      this.fail(code);
+    }
+  }
+
+  // 再接続をスケジュールする。上限に達していれば最終的なエラー表示にフォールバックする。
+  private scheduleReconnect(finalCodeIfExhausted: string): void {
+    this.teardownConnection();
+    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      this.isReconnecting = false;
+      this.fail(finalCodeIfExhausted);
+      return;
+    }
+    this.reconnectAttempts += 1;
+    const attempt = this.reconnectAttempts;
+    this.isReconnecting = true;
+    this.setState("reconnecting");
+    this.cb.onDiag?.("reconnect", `attempt ${attempt}/${MAX_RECONNECT_ATTEMPTS}`);
+    const delay = RECONNECT_BACKOFF_MS[attempt - 1] ?? RECONNECT_BACKOFF_MS[RECONNECT_BACKOFF_MS.length - 1];
+    this.reconnectTimer = window.setTimeout(() => {
+      this.reconnectTimer = null;
+      if (this.manualStop) return;
+      this.connectOnce(true);
+    }, delay);
   }
 
   // data channel メッセージは string / Blob / ArrayBuffer のいずれでも届きうる。
@@ -272,9 +353,9 @@ export class RealtimeSession {
     this.stop();
   }
 
-  // 接続とマイクを確実に解放する（Stop / unload から呼ぶ）。
-  stop(): void {
-    this.setState("stopping");
+  // 現在の接続（PeerConnection/DataChannel/マイクストリーム）だけを閉じる。
+  // state 遷移は行わない（再接続時は "reconnecting" を維持するため）。
+  private teardownConnection(): void {
     this.stopLevelMeter();
     try {
       this.dc?.close();
@@ -292,6 +373,18 @@ export class RealtimeSession {
     this.dc = null;
     this.pc = null;
     this.stream = null;
+  }
+
+  // 接続とマイクを確実に解放する（Stop / unload から呼ぶ）。以降の自動再接続も停止する。
+  stop(): void {
+    this.manualStop = true;
+    this.isReconnecting = false;
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.setState("stopping");
+    this.teardownConnection();
     this.setState("idle");
   }
 }

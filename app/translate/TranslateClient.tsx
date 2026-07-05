@@ -24,6 +24,7 @@ const stateLabel: Record<RealtimeState, string> = {
   requesting: "準備中…",
   connecting: "接続中…",
   live: "接続中（話してください）",
+  reconnecting: "再接続中…（字幕は保持されます）",
   stopping: "停止処理中…",
   error: "エラー",
 };
@@ -310,7 +311,7 @@ export default function TranslateClient() {
     };
   }, []);
 
-  const isActive = state === "connecting" || state === "live";
+  const isActive = state === "connecting" || state === "live" || state === "reconnecting";
   const micSilent = state === "live" && micPeak < MIC_ACTIVE;
 
   return (
