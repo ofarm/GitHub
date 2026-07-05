@@ -42,10 +42,14 @@
 - 詰まりの真因は Chrome のマイク選択（OS は正常でも別デバイス）。getStats の送信レベル可視化で特定→Chrome 側でマイク変更し解決。
 - 用途確定: **字幕メイン**。翻訳音声は既定オフ（トグルで任意再生）。会議の周囲音声を拾うため getUserMedia は echoCancellation/noiseSuppression/autoGainControl=false。
 
+## フェーズ: 実用化 V1（2026-07-05 計画。詳細= docs/roadmap-v1.md）
+- MVP はPC/iPhoneで動作済み。次は「会議1本を完走」のための V1.1〜V1.6。
+- 実装は Haiku 級に引き継ぐ（roadmap-v1.md 末尾の運用ルールに従う。1実行=1チケット）。
+
 ## 次のチケット（最大3件）
-1. 人間: H-1（実 OAuth）/ H-2（OpenAI 実 wire 検証）/ H-3（ZDR 確認）。
-2. Agent 可能なら: 実機/実鍵フィードバックの反映、CSP connect-src 最小化（H-2 結果待ち）。
-3. T5.3 実機 → T5.4 リリース判定（人間承認）。
+1. V1.1 タブ切替で切断しない（Haiku可・TranslateClient.tsx のみ）。
+2. V1.2 Screen Wake Lock（Haiku可）。
+3. V1.5 無音自動停止 → V1.6 経過時間表示（Haiku可）。その後 V1.3/V1.4 は中モデル+人間テスト。
 
 ## 参照
 要件=docs/requirements / 設計=docs/architecture / セキュリティ=docs/security / データ=docs/privacy-data-handling / 戦略=docs/agent-strategy / バックログ=docs/backlog / リスク=docs/risks / チケット=TASKS.md。
