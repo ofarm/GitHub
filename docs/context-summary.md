@@ -47,9 +47,9 @@
 - 実装は Haiku 級に引き継ぐ（roadmap-v1.md 末尾の運用ルールに従う。1実行=1チケット）。
 
 ## 次のチケット（最大3件）
-1. V1.5 無音自動停止（Haiku可）。
-2. V1.6 経過時間・概算コスト表示（Haiku可）。
-3. V1.3 自動再接続（中モデル）。その後 V1.4 は中モデル+人間テスト。
+1. V1.6 経過時間・概算コスト表示（Haiku可）。
+2. V1.3 自動再接続（中モデル）。
+3. V1.4 長時間セッション検証（中モデル+人間テスト）。
 
 ## 参照
 要件=docs/requirements / 設計=docs/architecture / セキュリティ=docs/security / データ=docs/privacy-data-handling / 戦略=docs/agent-strategy / バックログ=docs/backlog / リスク=docs/risks / チケット=TASKS.md。

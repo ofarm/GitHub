@@ -15,6 +15,8 @@ type WakeLockSentinel = { release: () => Promise<void> } & EventTarget;
 
 const MAX_LINES = 50; // 表示行の上限（メモリのみ・保存しない）。
 const MIC_ACTIVE = 5; // この値を超えたら「音声を検出」とみなす。
+const SILENCE_STOP_MINUTES = 10; // この分数連続で無音なら自動停止（コスト保護）。
+const SILENCE_STOP_MS = SILENCE_STOP_MINUTES * 60 * 1000;
 
 const stateLabel: Record<RealtimeState, string> = {
   idle: "停止中",
@@ -44,6 +46,8 @@ export default function TranslateClient() {
   const curEnRef = useRef<string>("");
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const silenceStartRef = useRef<number | null>(null); // 無音開始時刻（ミリ秒）。
+  const silenceTimerRef = useRef<number | null>(null); // 無音タイマーID。
 
   useEffect(() => {
     setDebug(new URLSearchParams(window.location.search).has("debug"));
@@ -114,6 +118,12 @@ export default function TranslateClient() {
     curEnRef.current = "";
     setJaLines([]);
     setEnLines([]);
+    // 無音タイマーをリセット。
+    if (silenceTimerRef.current !== null) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+    silenceStartRef.current = null;
     const session = new RealtimeSession({
       onDelta: appendDelta,
       onStateChange: setState,
@@ -143,6 +153,12 @@ export default function TranslateClient() {
   }, [appendDelta]);
 
   const stop = useCallback(() => {
+    // 無音タイマーをクリア。
+    if (silenceTimerRef.current !== null) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+    silenceStartRef.current = null;
     sessionRef.current?.stop();
     sessionRef.current = null;
   }, []);
@@ -177,10 +193,60 @@ export default function TranslateClient() {
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [state]);
 
+  // 無音自動停止: 10分連続で無音なら自動停止（コスト保護）。
+  useEffect(() => {
+    if (state !== "live") {
+      // live 以外では無音タイマーをクリア。
+      if (silenceTimerRef.current !== null) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
+      silenceStartRef.current = null;
+      return;
+    }
+
+    // live 中: micLevel で無音判定。
+    if (micLevel > MIC_ACTIVE) {
+      // 音声あり → 無音タイマーをリセット。
+      if (silenceTimerRef.current !== null) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
+      silenceStartRef.current = null;
+    } else {
+      // 無音中。
+      if (silenceStartRef.current === null) {
+        silenceStartRef.current = Date.now();
+        // SILENCE_STOP_MS 後に自動停止。
+        silenceTimerRef.current = window.setTimeout(() => {
+          // 再度確認: 今もまだ無音か？（ノイズで誤発火防止）
+          if (micLevel <= MIC_ACTIVE) {
+            setErrorCode("SILENCE_STOP");
+            stop();
+          }
+          silenceTimerRef.current = null;
+          silenceStartRef.current = null;
+        }, SILENCE_STOP_MS);
+      }
+    }
+
+    return () => {
+      if (silenceTimerRef.current !== null) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
+    };
+  }, [state, micLevel, stop]);
+
   // ページ離脱時に確実に解放（pagehide のみ）。
   // 注: visibilitychange:hidden は削除。タブ切替時は接続を保持し、pagehide(タブ閉じ)で初めて解放する。
   useEffect(() => {
     const release = async () => {
+      // 無音タイマーをクリア。
+      if (silenceTimerRef.current !== null) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
       // Wake Lock を解放
       if (wakeLockRef.current) {
         try {
@@ -323,5 +389,7 @@ function errorMessage(code: string): string {
     return `接続に失敗しました（${code}）。`;
   if (code.startsWith("START_FAILED"))
     return "マイクの取得または接続開始に失敗しました。マイク権限を確認してください。";
+  if (code.startsWith("SILENCE_STOP"))
+    return `無音が${SILENCE_STOP_MINUTES}分続いたため、自動停止しました（コスト保護）。`;
   return `エラーが発生しました（コード: ${code}）。再試行してください。`;
 }
