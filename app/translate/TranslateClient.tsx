@@ -5,6 +5,9 @@ import { RealtimeSession, type DeltaKind, type RealtimeState } from "@/lib/realt
 import { Controls } from "@/components/Controls";
 import { Subtitles } from "@/components/Subtitles";
 
+// Screen Wake Lock API の型定義（ブラウザ non-support で undefined）。
+type WakeLockSentinel = { release: () => Promise<void> } & EventTarget;
+
 // 翻訳のクライアントUI。
 // 非交渉制約:
 //  - 字幕(本文)はメモリ state のみ。storage / console / log に出さない。
@@ -39,6 +42,7 @@ export default function TranslateClient() {
   const sessionRef = useRef<RealtimeSession | null>(null);
   const curJaRef = useRef<string>("");
   const curEnRef = useRef<string>("");
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -49,6 +53,40 @@ export default function TranslateClient() {
   useEffect(() => {
     if (audioRef.current) audioRef.current.muted = !playAudio;
   }, [playAudio]);
+
+  // Screen Wake Lock: live 中は画面がスリープしないようにする。非対応ブラウザでは無害。
+  useEffect(() => {
+    const acquireWakeLock = async () => {
+      try {
+        if ("wakeLock" in navigator && !wakeLockRef.current) {
+          const lock = await navigator.wakeLock.request("screen");
+          wakeLockRef.current = lock;
+          lock.addEventListener("release", () => {
+            wakeLockRef.current = null;
+          });
+        }
+      } catch {
+        // Non-support or permission denied - fail silently
+      }
+    };
+
+    const releaseWakeLock = async () => {
+      if (wakeLockRef.current) {
+        try {
+          await wakeLockRef.current.release();
+        } catch {
+          // noop
+        }
+        wakeLockRef.current = null;
+      }
+    };
+
+    if (state === "live") {
+      acquireWakeLock();
+    } else if (state === "stopping" || state === "error") {
+      releaseWakeLock();
+    }
+  }, [state]);
 
   const appendDelta = useCallback((kind: DeltaKind, text: string) => {
     // 増分を該当系統の現在行に連結。改行で行を確定。本文はログしない。
@@ -116,14 +154,49 @@ export default function TranslateClient() {
     setEnLines([]);
   }, []);
 
+  // タブ表示時に Wake Lock を再取得する（Wake Lock は非表示タブで自動解放される仕様）。
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === "visible" && state === "live") {
+        // 既に取得済みなら何もしない。
+        if (wakeLockRef.current) return;
+        navigator.wakeLock
+          ?.request("screen")
+          .then((lock) => {
+            wakeLockRef.current = lock;
+            lock.addEventListener("release", () => {
+              wakeLockRef.current = null;
+            });
+          })
+          .catch(() => {
+            // Non-support or other error - fail silently
+          });
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [state]);
+
   // ページ離脱時に確実に解放（pagehide のみ）。
   // 注: visibilitychange:hidden は削除。タブ切替時は接続を保持し、pagehide(タブ閉じ)で初めて解放する。
   useEffect(() => {
-    const release = () => sessionRef.current?.stop();
+    const release = async () => {
+      // Wake Lock を解放
+      if (wakeLockRef.current) {
+        try {
+          await wakeLockRef.current.release();
+        } catch {
+          // noop
+        }
+        wakeLockRef.current = null;
+      }
+      // セッションを停止
+      sessionRef.current?.stop();
+    };
     window.addEventListener("pagehide", release);
     return () => {
       window.removeEventListener("pagehide", release);
-      sessionRef.current?.stop();
+      release();
     };
   }, []);
 
