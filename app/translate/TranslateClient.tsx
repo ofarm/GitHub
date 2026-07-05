@@ -17,6 +17,7 @@ const MAX_LINES = 50; // 表示行の上限（メモリのみ・保存しない�
 const MIC_ACTIVE = 5; // この値を超えたら「音声を検出」とみなす。
 const SILENCE_STOP_MINUTES = 10; // この分数連続で無音なら自動停止（コスト保護）。
 const SILENCE_STOP_MS = SILENCE_STOP_MINUTES * 60 * 1000;
+const COST_PER_MINUTE = 0.051; // OpenAI Realtime translate + whisper（$0.034 + $0.017）。
 
 const stateLabel: Record<RealtimeState, string> = {
   idle: "停止中",
@@ -48,6 +49,9 @@ export default function TranslateClient() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const silenceStartRef = useRef<number | null>(null); // 無音開始時刻（ミリ秒）。
   const silenceTimerRef = useRef<number | null>(null); // 無音タイマーID。
+  const [elapsedSeconds, setElapsedSeconds] = useState(0); // live 中の経過時間（秒）。
+  const liveStartRef = useRef<number | null>(null); // live 遷移時刻（ミリ秒）。
+  const elapsedTimerRef = useRef<number | null>(null); // 経過時間更新用タイマーID。
 
   useEffect(() => {
     setDebug(new URLSearchParams(window.location.search).has("debug"));
@@ -124,6 +128,13 @@ export default function TranslateClient() {
       silenceTimerRef.current = null;
     }
     silenceStartRef.current = null;
+    // 経過時間をリセット。
+    setElapsedSeconds(0);
+    liveStartRef.current = null;
+    if (elapsedTimerRef.current !== null) {
+      clearInterval(elapsedTimerRef.current);
+      elapsedTimerRef.current = null;
+    }
     const session = new RealtimeSession({
       onDelta: appendDelta,
       onStateChange: setState,
@@ -159,6 +170,11 @@ export default function TranslateClient() {
       silenceTimerRef.current = null;
     }
     silenceStartRef.current = null;
+    // 経過時間タイマーをクリア。
+    if (elapsedTimerRef.current !== null) {
+      clearInterval(elapsedTimerRef.current);
+      elapsedTimerRef.current = null;
+    }
     sessionRef.current?.stop();
     sessionRef.current = null;
   }, []);
@@ -237,6 +253,34 @@ export default function TranslateClient() {
       }
     };
   }, [state, micLevel, stop]);
+
+  // 経過時間カウント: live 中に mm:ss を更新。Stop で計測を停止（リセットは次回 Start）。
+  useEffect(() => {
+    if (state === "live") {
+      if (liveStartRef.current === null) {
+        liveStartRef.current = Date.now();
+      }
+      // 100ms ごとに経過時間を更新。
+      elapsedTimerRef.current = window.setInterval(() => {
+        if (liveStartRef.current !== null) {
+          const elapsed = Math.floor((Date.now() - liveStartRef.current) / 1000);
+          setElapsedSeconds(elapsed);
+        }
+      }, 100);
+    } else {
+      // live 以外では計測を止める。
+      if (elapsedTimerRef.current !== null) {
+        clearInterval(elapsedTimerRef.current);
+        elapsedTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (elapsedTimerRef.current !== null) {
+        clearInterval(elapsedTimerRef.current);
+        elapsedTimerRef.current = null;
+      }
+    };
+  }, [state]);
 
   // ページ離脱時に確実に解放（pagehide のみ）。
   // 注: visibilitychange:hidden は削除。タブ切替時は接続を保持し、pagehide(タブ閉じ)で初めて解放する。
@@ -320,6 +364,12 @@ export default function TranslateClient() {
               <code> chrome://settings/content/microphone </code>
               で「マイク」が正しいデバイスになっているか確認し、Start し直してください。
             </p>
+          )}
+          {state === "live" && (
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--muted)" }}>
+              <span>経過時間: {Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, "0")}</span>
+              <span>概算コスト: ${(elapsedSeconds / 60 * COST_PER_MINUTE).toFixed(3)}</span>
+            </div>
           )}
         </div>
       )}

@@ -31,25 +31,25 @@
 - Gate 5 静的セキュリティレビュー #1 完了（Critical/High なし）→ `docs/security-review.md`。
 - 人間の残作業は `docs/human-todo.md`（H-1〜H-8）に集約。
 
-## マイルストーン: MVP コア完成（2026-06-22）
-- PC・**iPhone Safari の両方**で 英→日 リアルタイム字幕が本番動作（H-1/H-2/H-4 完了）。
-- **併記表示**追加: 英語原文(input_transcript)と日本語訳(output_transcript)を種別で振り分け2段表示。英語表示で whisper 入力文字起こし分の課金が増える点に留意（cost-estimation 参照）。
-- 残: **H-3 は方針B（ZDR/Modified Abuse Monitoring を申請）に決定・時間が取れ次第実施**（human-todo H-3）。コードは安定、セキュリティレビュー#2 済み。
+## マイルストーン: Phase 1 コア完成（2026-07-05）
+- **V1.1-V1.6 の 6 つのチケットうち、Haiku 可能な 4 つ（V1.1/V1.2/V1.5/V1.6）が完了** ✅
+  - V1.1: タブ切替で翻訳が切断されない（pagehide のみで解放）
+  - V1.2: Screen Wake Lock（live 中にスリープしない）
+  - V1.5: 無音 10 分で自動停止（コスト保護）
+  - V1.6: 経過時間（mm:ss）と概算コスト表示（$cost_per_minute 定数化）
+- 残る 2 つはミドルモデル対応:
+  - **V1.3: 自動再接続**（接続状態機械の改変）。最大 3 回・指数バックオフ・字幕保持。
+  - **V1.4: 長時間セッション検証**（60 分稼働テスト・実会議必須）。
 
 ## H-2 完了（2026-06-22）— 翻訳が本番で動作
-- 英→日の字幕・音声ともに本番(git-hub-tan.vercel.app)で動作確認。
-- 確定した実 wire: 発行=`/v1/realtime/translations/client_secrets`（cookbook 形ボディ・session.audio.output.language=ja）、SDP=`/v1/realtime/translations/calls`、翻訳テキスト=`session.output_transcript.delta`(delta)。
-- 詰まりの真因は Chrome のマイク選択（OS は正常でも別デバイス）。getStats の送信レベル可視化で特定→Chrome 側でマイク変更し解決。
-- 用途確定: **字幕メイン**。翻訳音声は既定オフ（トグルで任意再生）。会議の周囲音声を拾うため getUserMedia は echoCancellation/noiseSuppression/autoGainControl=false。
-
-## フェーズ: 実用化 V1（2026-07-05 計画。詳細= docs/roadmap-v1.md）
-- MVP はPC/iPhoneで動作済み。次は「会議1本を完走」のための V1.1〜V1.6。
-- 実装は Haiku 級に引き継ぐ（roadmap-v1.md 末尾の運用ルールに従う。1実行=1チケット）。
+- 英→日の字幕・音声ともに本番で動作確認。
+- 確定した実 wire: 発行=`/v1/realtime/translations/client_secrets`、SDP=`/v1/realtime/translations/calls`、翻訳テキスト=`session.output_transcript.delta`。
+- 用途確定: **字幕メイン**。翻訳音声は既定オフ（トグルで任意再生）。会議の周囲音声を拾うため音声処理無効化。
 
 ## 次のチケット（最大3件）
-1. V1.6 経過時間・概算コスト表示（Haiku可）。
-2. V1.3 自動再接続（中モデル）。
-3. V1.4 長時間セッション検証（中モデル+人間テスト）。
+1. V1.3 自動再接続（中モデル）。接続状態機械の改変のため Haiku では不可。
+2. V1.4 長時間セッション検証（中モデル+人間テスト）。実会議 60 分稼働検証が必要。
+3. Phase 2 へ進む（V2.1 PC タブ音声取込、V2.3 PWA 化等）。
 
 ## 参照
 要件=docs/requirements / 設計=docs/architecture / セキュリティ=docs/security / データ=docs/privacy-data-handling / 戦略=docs/agent-strategy / バックログ=docs/backlog / リスク=docs/risks / チケット=TASKS.md。
