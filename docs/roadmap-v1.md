@@ -74,9 +74,15 @@
 |---|---|---|---|
 | V2.1 | **PC タブ音声の取込**（`getDisplayMedia` の音声共有）— ヘッドホン会議対応。「マイク / タブ音声」切替UIを追加 | 中〜高モデル | G6 の解。CSP/権限/Safari非対応に注意。最重要の Phase 2 チケット |
 | V2.2 | 表示設定（フォントサイズ大中小・英語併記 ON/OFF） | Haiku可 | ⚠️設定値の永続化は本文ではないが、localStorage 使用は AGENTS.md の禁止列挙に触れるため**「設定値のみ可」への改訂を人間承認**してから。承認までは非永続でよい |
-| V2.3 | PWA 化（manifest・アイコン・スタンドアロン表示） | Haiku可 | ホーム画面から1タップ起動 |
+| V2.3 | PWA 化（manifest・アイコン・スタンドアロン表示） | Haiku可 | **完了(2026-07-05)**。ホーム画面から1タップ起動 |
 | V2.4 | レート制限のエッジ化（Vercel KV 等） | 中モデル | 依存追加 = **人間承認ゲート**。個人利用では現状でも実害小のため後回し可 |
-| V2.5 | 自動スクロールの一時停止（上へスクロール中は追従停止、「最新へ」ボタン） | Haiku可 | 読み返し用 |
+| V2.5 | 自動スクロールの一時停止（上へスクロール中は追従停止、「最新へ」ボタン） | Haiku可 | **完了(2026-07-05・要人間の目視確認)**。読み返し用 |
+
+### V2.3 実装メモ
+- `app/manifest.ts`: name/short_name/description/start_url(`/translate`)/display=standalone/背景色・テーマ色/icons(192・512)。
+- アイコンは静的画像追加ではなく `next/og` の `ImageResponse` で動的生成（新規依存なし）: `app/icon.tsx`(favicon 32x32)・`app/apple-icon.tsx`(iOS用 180x180)・`app/icon-192.png/route.tsx`・`app/icon-512.png/route.tsx`（マニフェスト用）。
+- `app/layout.tsx` に `appleWebApp`(capable/statusBarStyle/title) と `viewport.themeColor` を追加し、iOS ホーム画面追加時にスタンドアロン表示（Safari の chrome 非表示）になるようにした。
+- ビルド確認: `/manifest.webmanifest`・`/icon`・`/apple-icon`・`/icon-192.png`・`/icon-512.png` が全て 200・正しい content-type で応答することを `next start` 起動＋curl で確認済み。生成アイコンの見た目も目視確認済み。
 
 ## Phase 3（P2）: 検討（人間の意思決定が必要）
 
