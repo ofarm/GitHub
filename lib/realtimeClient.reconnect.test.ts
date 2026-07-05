@@ -184,4 +184,29 @@ describe("RealtimeSession 自動再接続", () => {
     await vi.advanceTimersByTimeAsync(5000);
     expect(peerConnections.length).toBe(1);
   });
+
+  it("session_expired イベントを受信すると自動再接続する（切断を待たずに先回り）", async () => {
+    const states: string[] = [];
+    const session = new RealtimeSession({
+      onDelta: () => {},
+      onStateChange: (s) => states.push(s),
+    });
+
+    await session.start();
+    peerConnections[0].setConnectionState("connected");
+    expect(states.at(-1)).toBe("live");
+
+    const dc = peerConnections[0].createDataChannel.mock.results[0]!.value as FakeDataChannel;
+    dc.dispatchEvent("message", {
+      data: JSON.stringify({ type: "error", error: { code: "session_expired" } }),
+    });
+    expect(states.at(-1)).toBe("reconnecting");
+
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(peerConnections.length).toBe(2);
+    peerConnections[1].setConnectionState("connected");
+    expect(states.at(-1)).toBe("live");
+
+    session.stop();
+  });
 });

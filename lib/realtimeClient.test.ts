@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractDelta } from "./realtimeClient";
+import { extractDelta, isSessionExpiredEvent } from "./realtimeClient";
 
 // テストデータは架空かつ無害な短文のみ。
 describe("extractDelta", () => {
@@ -43,5 +43,29 @@ describe("extractDelta", () => {
     expect(extractDelta("string")).toBeNull();
     expect(extractDelta({ type: "x.delta", delta: 123 })).toBeNull();
     expect(extractDelta({})).toBeNull();
+  });
+});
+
+describe("isSessionExpiredEvent", () => {
+  it("error.code に session_expired を含むイベントを検知する", () => {
+    expect(
+      isSessionExpiredEvent({ type: "error", error: { code: "session_expired" } }),
+    ).toBe(true);
+    expect(
+      isSessionExpiredEvent({
+        type: "error",
+        error: { code: "realtime_session_expired", message: "..." },
+      }),
+    ).toBe(true);
+  });
+
+  it("無関係なイベント・エラーは false", () => {
+    expect(isSessionExpiredEvent({ type: "response.created" })).toBe(false);
+    expect(isSessionExpiredEvent({ type: "error", error: { code: "invalid_request" } })).toBe(
+      false,
+    );
+    expect(isSessionExpiredEvent({ type: "error" })).toBe(false);
+    expect(isSessionExpiredEvent(null)).toBe(false);
+    expect(isSessionExpiredEvent({})).toBe(false);
   });
 });

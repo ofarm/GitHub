@@ -437,7 +437,9 @@ function errorMessage(code: string): string {
   if (code.startsWith("UPSTREAM"))
     return `OpenAI が発行リクエストを拒否しました（${code}）。APIキー・課金・モデル権限を確認してください。`;
   if (code.startsWith("SDP_EXCHANGE_FAILED") || code.startsWith("CONNECTION_LOST"))
-    return `接続に失敗しました（${code}）。`;
+    return `接続に失敗しました（${code}）。再接続を試みましたが復帰できませんでした。もう一度 Start してください。`;
+  if (code.startsWith("SESSION_EXPIRED"))
+    return "セッションの最大時間に達したため接続が終了しました。再接続を試みましたが復帰できませんでした。もう一度 Start してください。";
   if (code.startsWith("START_FAILED"))
     return "マイクの取得または接続開始に失敗しました。マイク権限を確認してください。";
   if (code.startsWith("SILENCE_STOP"))

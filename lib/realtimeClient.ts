@@ -65,6 +65,20 @@ export function extractDelta(evt: unknown): { kind: DeltaKind; text: string } | 
   return { kind: isSource ? "source" : "translation", text };
 }
 
+// セッション最大長（OpenAI Realtime は現行60分）到達による明示終了を検知する純粋関数。
+// ⚠️verify: 正確な error.code 文字列は実 wire で未確認。"session_expired" を含む値を広めに拾う。
+// 検知できなくても connectionstatechange の失敗検知（CONNECTION_LOST）が最終的に効くため、
+// 本検知は「より早く・より正確な理由で」再接続を開始するための先回り検知（無くても機能は保たれる）。
+export function isSessionExpiredEvent(evt: unknown): boolean {
+  if (!evt || typeof evt !== "object") return false;
+  const o = evt as Record<string, unknown>;
+  if (o.type !== "error") return false;
+  const err = o.error;
+  if (!err || typeof err !== "object") return false;
+  const code = (err as Record<string, unknown>).code;
+  return typeof code === "string" && code.includes("session_expired");
+}
+
 export class RealtimeSession {
   private pc: RTCPeerConnection | null = null;
   private stream: MediaStream | null = null;
@@ -236,7 +250,8 @@ export class RealtimeSession {
   private handleAttemptFailure(code: string): void {
     if (this.manualStop || this.failureHandled) return;
     this.failureHandled = true;
-    const retryEligible = this.isReconnecting || code === "CONNECTION_LOST";
+    const retryEligible =
+      this.isReconnecting || code === "CONNECTION_LOST" || code === "SESSION_EXPIRED";
     if (retryEligible) {
       this.scheduleReconnect(code);
     } else {
@@ -301,6 +316,11 @@ export class RealtimeSession {
         type: typeof o.type === "string" ? o.type : "(no type)",
         keys: Object.keys(o),
       });
+    }
+    if (isSessionExpiredEvent(evt)) {
+      // セッション最大長に到達。接続が切れる前に先回りして再接続を開始する（字幕は保持）。
+      this.handleAttemptFailure("SESSION_EXPIRED");
+      return;
     }
     const d = extractDelta(evt);
     if (d !== null) this.cb.onDelta(d.kind, d.text);

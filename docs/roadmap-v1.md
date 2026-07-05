@@ -50,9 +50,11 @@
 - 触るファイル: `lib/realtimeClient.ts`, `TranslateClient.tsx`。
 
 ### V1.4 長時間セッション検証・上限対応
-- 内容: ⚠️verify — Realtime セッションの最大長（一般に60分程度の上限がある可能性）を公式ドキュメントで確認。上限があるなら、上限前または上限エラー検知時に V1.3 の再接続を流用してシームレスに張り直す。
-- AC: **60分の連続稼働テスト**（人間・実会議 or 動画で）で字幕が途切れないこと（張り直し時の数秒断は許容）。
-- 依存: V1.3。
+- 内容: ⚠️verify → **確認済み(2026-07)**: Realtime セッションの最大長は現行 **60分**（過去は30分/15分の時期あり、コミュニティ報告ベース）。上限到達時は `error` イベント（`error.code` に `session_expired` を含む）が送出されることが報告されている。
+- 実装済み: `lib/realtimeClient.ts` の `isSessionExpiredEvent()` がこのイベントを検知し、V1.3 の再接続機構（`handleAttemptFailure`）に "SESSION_EXPIRED" として渡す。切断を待たずに先回りして再接続を開始し、字幕は保持される。単体テスト2件（`realtimeClient.test.ts`・`realtimeClient.reconnect.test.ts`）で検証済み。
+- ⚠️ 残り verify: `error.code` の正確な文字列は実 wire 未確認（コミュニティ情報ベースの推定）。検知できなくても `connectionstatechange` の失敗検知（CONNECTION_LOST）が最終的なフォールバックとして機能するため、実装の安全性には影響しない。
+- AC: **60分の連続稼働テスト**（人間・実会議 or 動画で）で字幕が途切れないこと（張り直し時の数秒断は許容）。**→ 人間の実地テストが未実施のため残作業**。
+- 依存: V1.3（完了）。
 
 ### V1.5 無音自動停止（コスト保護）
 - 内容: 既存の `micLevel`（getStats 送信レベル）を流用し、**10分連続で無音**（レベル < 閾値）なら自動 Stop ＋「無音が続いたため停止しました」表示。定数は `lib/` に集約（`SILENCE_STOP_MINUTES = 10` 等）。
