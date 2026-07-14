@@ -84,6 +84,42 @@
 - `app/layout.tsx` に `appleWebApp`(capable/statusBarStyle/title) と `viewport.themeColor` を追加し、iOS ホーム画面追加時にスタンドアロン表示（Safari の chrome 非表示）になるようにした。
 - ビルド確認: `/manifest.webmanifest`・`/icon`・`/apple-icon`・`/icon-192.png`・`/icon-512.png` が全て 200・正しい content-type で応答することを `next start` 起動＋curl で確認済み。生成アイコンの見た目も目視確認済み。
 
+## Phase 2 補遺（2026-07-14 計画・Fable5 プランニング / 実装は Sonnet5 エージェントに委任）
+
+### B-1 【バグ】無音自動停止が実質発火しない（V1.5 の欠陥修正）
+- 症状: `TranslateClient.tsx` の無音判定 effect は deps に `micLevel` を含み、cleanup で予約中のタイマーを消す。無音中でも micLevel は 0↔1↔2 と揺れるため、揺れるたびに「cleanup がタイマーを破棄 → body は `silenceStartRef` が非 null のため再予約しない」となり、10分タイマーがほぼ確実に発火前に消える。さらに setTimeout クロージャの `micLevel` は古い値（stale closure）。
+- 修正方針: **render 連動の effect から切り離す**。`lastActiveAtRef`（最後に micLevel > MIC_ACTIVE だった時刻）を onDiag 経由の micLevel 更新時に ref へ記録し、live 中だけ動く**単一の周期チェック interval**（例: 10 秒毎）で `Date.now() - lastActiveAtRef.current > SILENCE_STOP_MS` を判定して自動 Stop。state/micLevel の再レンダーに影響されない。
+- AC: ①無音10分（テストでは定数を短縮せず fake timer で検証可能なら尚可）で停止・SILENCE_STOP 表示 ②micLevel が低レベルで揺れても停止までの計測が途切れない ③発話で計測リセット ④Stop/再Start で誤発火なし。
+- 触るファイル: `app/translate/TranslateClient.tsx`。
+
+### V2.1 PC タブ音声の取込（ヘッドホン会議対応）— 詳細仕様
+- UI: Start 前に音源を選ぶセグメント（「マイク」/「タブ音声」）。live 中は変更不可。`getDisplayMedia` 非対応（iOS Safari 等）の環境では選択肢を出さない（フィーチャーディテクト）。
+- 取得: `navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })`（Chrome はタブ選択ダイアログで「タブの音声も共有」にチェックが必要。audio のみ指定はブラウザにより拒否されるため video 併用で取得し、video トラックは送信しない）。音声トラックが 0 本なら「音声が共有されていません。『タブの音声も共有』にチェックしてください」を表示して開始しない。
+- 送信: 音声トラックのみ `addTrack`。video トラックは**停止しない**（停止すると共有全体が終わるブラウザがあるため保持だけする）。
+- 終了系: ユーザーがブラウザ UI で共有停止 → audio トラック `ended` → 手動 Stop 相当の後片付け＋「画面共有が終了したため停止しました」表示。
+- **再接続との整合（重要）**: `getDisplayMedia` はユーザー操作起点が必須のため、V1.3 の自動再接続時に再取得できない。→ `teardownConnection` を「ストリームを保持したまま接続だけ張り直す」形に拡張し（`keepStream` 引数等）、タブ音声ソースの再接続では**既存ストリームを再利用**する。トラックが既に ended なら再接続せずエラー表示。マイクソースは従来どおり再取得でよい（getUserMedia は gesture 不要）。
+- AC: ①ヘッドホン装着のまま PC のタブ音声が翻訳される ②共有停止で安全に Stop ③タブ音声中の瞬断から自動復帰（共有は継続） ④マイク経路の既存動作に回帰なし（既存テスト green）。
+- 触るファイル: `lib/realtimeClient.ts` / `app/translate/TranslateClient.tsx`（+必要なら `components/Controls.tsx`）。
+
+### V2.6 E2E テスト（Playwright）
+- 方針: `@playwright/test` を **devDependency** に追加（依存追加はオーナーの 2026-07-14 指示「E2Eテストも進めてください」を承認とみなす。docs/security.md の依存例外にも追記）。実行環境には Chromium がプリインストール済み（`PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`、`playwright install` は実行しない）。
+- スコープ（実 OAuth 鍵なしで検証できる範囲）:
+  1. `/` が未認証で表示され「Google でログイン」ボタンがある。
+  2. 未認証で `/translate` → `/` へリダイレクトされる。
+  3. 未認証 `POST /api/realtime/client-secret` → 401。
+  4. `/manifest.webmanifest` が 200・想定フィールド（start_url=/translate, display=standalone）。
+  5. アイコン各ルートが 200・image/png。
+  6. **認証済みフロー（セッション偽造）**: テスト用 `AUTH_SECRET`/`ALLOWED_EMAILS`（架空メール）で `next start` を起動し、`next-auth` の JWT encode でセッション cookie を生成して `/translate` を表示 → Start/Stop/Clear ボタンと字幕プレースホルダの表示を検証。さらに Start 押下で（OPENAI_API_KEY 未設定のため）SERVER_MISCONFIGURED のエラーメッセージが表示されることを確認（配線の生存確認）。**実鍵・実会話は使わない**。
+- 成果物: `e2e/` ディレクトリ＋ `playwright.config.ts` ＋ `npm run test:e2e`。CI 前提はまだ不要（ローカル/エージェント実行）。
+- AC: 全 E2E green ＋ 既存 unit 35 green ＋ build green。
+
+### 実行順（エージェント割当）
+```
+B-1（Sonnet5・バグ修正）→ V2.1（Sonnet5・同一ファイル群のため同一実行で連続実施可）
+→ V2.6（Sonnet5・独立ファイル群）
+残: V2.2/V2.4（人間承認待ち）・V1.4 60分実地テスト（人間）・V2.5 目視確認（人間）
+```
+
 ## Phase 3（P2）: 検討（人間の意思決定が必要）
 
 - **V3.1 字幕の手動コピー**: 「本文を保存しない」制約と接するため、実装するなら**明示操作でクリップボードへのみ**・自動保存なし、`privacy-data-handling.md` 更新と**人間承認必須**。
