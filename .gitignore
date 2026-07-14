@@ -24,3 +24,7 @@ next-env.d.ts
 
 # テスト / カバレッジ
 coverage/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
