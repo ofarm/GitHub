@@ -39,6 +39,41 @@ class FakeStream {
   }
 }
 
+// タブ音声(getDisplayMedia)用のフェイク: audio/video 両トラックを持ち、
+// audio トラックは "ended" イベントを発火できる（共有終了のシミュレーション用）。
+class FakeDisplayAudioTrack extends FakeEventTarget {
+  kind = "audio";
+  label = "fake-tab-audio";
+  enabled = true;
+  muted = false;
+  readyState: "live" | "ended" = "live";
+  stop = vi.fn();
+}
+
+class FakeDisplayVideoTrack {
+  kind = "video";
+  label = "fake-tab-video";
+  readyState: "live" | "ended" = "live";
+  addEventListener() {
+    /* noop */
+  }
+  stop = vi.fn();
+}
+
+class FakeDisplayStream {
+  audioTrack = new FakeDisplayAudioTrack();
+  videoTrack = new FakeDisplayVideoTrack();
+  getTracks() {
+    return [this.videoTrack, this.audioTrack];
+  }
+  getAudioTracks() {
+    return [this.audioTrack];
+  }
+  getVideoTracks() {
+    return [this.videoTrack];
+  }
+}
+
 class FakeDataChannel extends FakeEventTarget {
   close = vi.fn();
   send = vi.fn();
@@ -208,5 +243,117 @@ describe("RealtimeSession 自動再接続", () => {
     expect(states.at(-1)).toBe("live");
 
     session.stop();
+  });
+
+  it("タブ音声ソースの再接続は既存ストリームを再利用する（getDisplayMedia再取得なし・getUserMediaも呼ばれない）", async () => {
+    const getUserMedia = vi.fn(async () => new FakeStream());
+    const getDisplayMedia = vi.fn(async () => new FakeDisplayStream());
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia, getDisplayMedia },
+    });
+
+    // Start ボタンの click ハンドラ相当（ユーザー操作起点）で事前取得したストリームを渡す。
+    const displayStream = await getDisplayMedia();
+    const states: string[] = [];
+    let errorCode: string | null = null;
+    const session = new RealtimeSession(
+      {
+        onDelta: () => {},
+        onStateChange: (s) => states.push(s),
+        onError: (c) => {
+          errorCode = c;
+        },
+      },
+      { source: "display", stream: displayStream as unknown as MediaStream },
+    );
+
+    await session.start();
+    expect(peerConnections.length).toBe(1);
+    peerConnections[0].setConnectionState("connected");
+    expect(states.at(-1)).toBe("live");
+
+    // 瞬断発生 → 再接続。
+    peerConnections[0].setConnectionState("failed");
+    expect(states.at(-1)).toBe("reconnecting");
+
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(peerConnections.length).toBe(2);
+    peerConnections[1].setConnectionState("connected");
+    expect(states.at(-1)).toBe("live");
+    expect(errorCode).toBeNull();
+
+    // 再接続の間、getDisplayMedia は最初の1回しか呼ばれておらず、getUserMedia は一度も呼ばれない。
+    expect(getDisplayMedia).toHaveBeenCalledTimes(1);
+    expect(getUserMedia).not.toHaveBeenCalled();
+    // video トラックは保持されたまま（送信はしないが停止もしない）。
+    expect(displayStream.videoTrack.stop).not.toHaveBeenCalled();
+
+    session.stop();
+    // 最終停止では video トラックも含めて解放する。
+    expect(displayStream.videoTrack.stop).toHaveBeenCalled();
+  });
+
+  it("タブ音声のトラックが既に終了している場合、再接続を諦めてエラー表示にする", async () => {
+    const getUserMedia = vi.fn(async () => new FakeStream());
+    const getDisplayMedia = vi.fn(async () => new FakeDisplayStream());
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia, getDisplayMedia },
+    });
+
+    const displayStream = await getDisplayMedia();
+    let errorCode: string | null = null;
+    const states: string[] = [];
+    const session = new RealtimeSession(
+      {
+        onDelta: () => {},
+        onStateChange: (s) => states.push(s),
+        onError: (c) => {
+          errorCode = c;
+        },
+      },
+      { source: "display", stream: displayStream as unknown as MediaStream },
+    );
+
+    await session.start();
+    peerConnections[0].setConnectionState("connected");
+    peerConnections[0].setConnectionState("failed");
+    expect(states.at(-1)).toBe("reconnecting");
+
+    // 再接続待機中に、共有元タブ側でトラックが終了したとする。
+    displayStream.audioTrack.readyState = "ended";
+
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(errorCode).toBe("DISPLAY_SHARE_ENDED");
+    // 終了済みトラックのため、新しい接続は作られない。
+    expect(peerConnections.length).toBe(1);
+    expect(getUserMedia).not.toHaveBeenCalled();
+  });
+
+  it("タブ音声共有が ended イベントで終了すると、再接続を試みず即座にエラー終了する", async () => {
+    const getDisplayMedia = vi.fn(async () => new FakeDisplayStream());
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia: vi.fn(async () => new FakeStream()), getDisplayMedia },
+    });
+
+    const displayStream = await getDisplayMedia();
+    let errorCode: string | null = null;
+    const session = new RealtimeSession(
+      {
+        onDelta: () => {},
+        onError: (c) => {
+          errorCode = c;
+        },
+      },
+      { source: "display", stream: displayStream as unknown as MediaStream },
+    );
+
+    await session.start();
+    peerConnections[0].setConnectionState("connected");
+
+    displayStream.audioTrack.dispatchEvent("ended");
+    expect(errorCode).toBe("DISPLAY_SHARE_ENDED");
+    // ended 後は再接続しない。
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(peerConnections.length).toBe(1);
   });
 });

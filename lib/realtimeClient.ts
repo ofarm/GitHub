@@ -12,6 +12,18 @@
 // 字幕の種別: source=英語原文 / translation=日本語訳。
 export type DeltaKind = "source" | "translation";
 
+// 音声の取得元。mic=マイク（getUserMedia） / display=タブ音声（getDisplayMedia）。
+export type AudioSource = "mic" | "display";
+
+export type RealtimeSessionOptions = {
+  // 既定 "mic"。
+  source?: AudioSource;
+  // "display" のとき: getDisplayMedia はユーザー操作起点の呼び出しが必須のため、
+  // 呼び出し側（Start ボタンの click ハンドラ内）で取得済みの MediaStream を渡す想定。
+  // RealtimeSession 自身は getDisplayMedia を呼ばない（自動再接続時に再取得できないため）。
+  stream?: MediaStream;
+};
+
 export type RealtimeCallbacks = {
   onDelta: (kind: DeltaKind, text: string) => void; // 字幕テキストの増分（種別付き）
   onStateChange?: (state: RealtimeState) => void;
@@ -92,9 +104,14 @@ export class RealtimeSession {
   private reconnectTimer: number | null = null;
   // 1回の接続試行につき、失敗ハンドラの多重発火を防ぐガード。
   private failureHandled = false;
+  // 音声の取得元と、"display" 用に呼び出し側で取得済みのストリーム。
+  private source: AudioSource;
+  private providedStream: MediaStream | null;
 
-  constructor(cb: RealtimeCallbacks) {
+  constructor(cb: RealtimeCallbacks, opts?: RealtimeSessionOptions) {
     this.cb = cb;
+    this.source = opts?.source ?? "mic";
+    this.providedStream = opts?.stream ?? null;
   }
 
   private setState(s: RealtimeState) {
@@ -134,13 +151,37 @@ export class RealtimeSession {
       const { clientSecret } = (await res.json()) as { clientSecret: string };
       if (this.manualStop) return;
 
-      // 2) マイク取得（ユーザー操作起点で呼ばれる前提 / iOS Safari 対応）。
-      // 会議などの周囲音声を拾いやすくするため、エコー除去/ノイズ抑制/自動ゲインを無効化。
-      // （スピーカーから出る相手の声を拾う用途。ヘッドホン利用時は別途システム音声取込が必要）
+      // 2) 音声ストリームを用意する。
+      // - mic: 会議などの周囲音声を拾いやすくするため、エコー除去/ノイズ抑制/自動ゲインを無効化。
+      //   （スピーカーから出る相手の声を拾う用途。ヘッドホン利用時は別途システム音声取込が必要）
+      //   getUserMedia はユーザー操作起点不要のため、再接続のたびに取得し直してよい。
+      // - display: getDisplayMedia はユーザー操作起点必須のため、呼び出し側が Start 操作の中で
+      //   取得済みのストリームを constructor 経由で渡す想定。再接続(isRetry)時は絶対に
+      //   取得し直さず、既存ストリームを再利用する。トラックが既に終了していれば
+      //   再接続を諦めて通常のエラー経路（fail）に倒す。
       if (!isRetry) this.setState("connecting");
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-      });
+      let stream: MediaStream;
+      if (this.source === "display") {
+        const existing = isRetry ? this.stream : this.providedStream;
+        if (!existing) {
+          this.handleAttemptFailure("START_FAILED");
+          return;
+        }
+        const audioTrack = existing.getAudioTracks()[0];
+        if (!audioTrack || audioTrack.readyState === "ended") {
+          // タブ音声共有が既に終了している。再接続不可のため通常の Stop 相当で終了する。
+          this.fail("DISPLAY_SHARE_ENDED");
+          return;
+        }
+        if (!isRetry) {
+          audioTrack.addEventListener("ended", () => this.handleDisplayTrackEnded());
+        }
+        stream = existing;
+      } else {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        });
+      }
       if (this.manualStop) {
         for (const track of stream.getTracks()) track.stop();
         return;
@@ -155,7 +196,10 @@ export class RealtimeSession {
       }
       this.pc = pc;
       let audioSender: RTCRtpSender | null = null;
-      for (const track of this.stream.getTracks()) {
+      // display ソースは video トラックを保持だけして送信しない（停止すると共有全体が終わりうるため）。
+      const tracksToSend =
+        this.source === "display" ? this.stream.getAudioTracks() : this.stream.getTracks();
+      for (const track of tracksToSend) {
         const sender = pc.addTrack(track, this.stream);
         if (track.kind === "audio") audioSender = sender;
       }
@@ -259,9 +303,19 @@ export class RealtimeSession {
     }
   }
 
+  // タブ音声共有が終了した（ユーザーがブラウザ UI で共有停止）。getDisplayMedia は
+  // ユーザー操作起点が必須で再接続時に取得し直せないため、再接続は試みず
+  // 手動 Stop 相当の後片付けをしてエラー表示する。
+  private handleDisplayTrackEnded(): void {
+    if (this.manualStop) return;
+    this.fail("DISPLAY_SHARE_ENDED");
+  }
+
   // 再接続をスケジュールする。上限に達していれば最終的なエラー表示にフォールバックする。
   private scheduleReconnect(finalCodeIfExhausted: string): void {
-    this.teardownConnection();
+    // display ソースはストリーム(video含む)を保持したまま接続だけ張り直す。
+    // getDisplayMedia を再度呼ぶとユーザー操作起点が必要になり自動再接続できないため。
+    this.teardownConnection({ keepStream: this.source === "display" });
     if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
       this.isReconnecting = false;
       this.fail(finalCodeIfExhausted);
@@ -373,9 +427,11 @@ export class RealtimeSession {
     this.stop();
   }
 
-  // 現在の接続（PeerConnection/DataChannel/マイクストリーム）だけを閉じる。
+  // 現在の接続（PeerConnection/DataChannel/マイク or タブ音声ストリーム）を閉じる。
   // state 遷移は行わない（再接続時は "reconnecting" を維持するため）。
-  private teardownConnection(): void {
+  // keepStream=true の場合はストリームを止めずに保持する
+  // （display ソースの再接続用: getDisplayMedia を取得し直せないため）。
+  private teardownConnection(opts: { keepStream?: boolean } = {}): void {
     this.stopLevelMeter();
     try {
       this.dc?.close();
@@ -387,12 +443,14 @@ export class RealtimeSession {
     } catch {
       /* noop */
     }
-    if (this.stream) {
-      for (const track of this.stream.getTracks()) track.stop();
+    if (!opts.keepStream) {
+      if (this.stream) {
+        for (const track of this.stream.getTracks()) track.stop();
+      }
+      this.stream = null;
     }
     this.dc = null;
     this.pc = null;
-    this.stream = null;
   }
 
   // 接続とマイクを確実に解放する（Stop / unload から呼ぶ）。以降の自動再接続も停止する。

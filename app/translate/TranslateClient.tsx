@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { RealtimeSession, type DeltaKind, type RealtimeState } from "@/lib/realtimeClient";
+import {
+  RealtimeSession,
+  type AudioSource,
+  type DeltaKind,
+  type RealtimeState,
+} from "@/lib/realtimeClient";
 import { Controls } from "@/components/Controls";
 import { Subtitles } from "@/components/Subtitles";
 
@@ -44,12 +49,15 @@ export default function TranslateClient() {
   // 診断: ?debug=1 のときだけ受信イベント種別/キーを表示（値=本文は持たない）。
   const [debug, setDebug] = useState(false);
   const [eventTypes, setEventTypes] = useState<Record<string, string>>({});
+  // 音源選択（マイク / タブ音声）。getDisplayMedia 非対応環境では UI を出さない。
+  const [audioSource, setAudioSource] = useState<AudioSource>("mic");
+  const [showAudioSourceSelector, setShowAudioSourceSelector] = useState(false);
   const sessionRef = useRef<RealtimeSession | null>(null);
   const curJaRef = useRef<string>("");
   const curEnRef = useRef<string>("");
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  // 最後にマイク入力を検知した時刻（ミリ秒）。render/state の再実行に依存しない。
+  // 最後にマイク/タブ音声の入力を検知した時刻（ミリ秒）。render/state の再実行に依存しない。
   const lastActiveAtRef = useRef<number>(Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0); // live 中の経過時間（秒）。
   const liveStartRef = useRef<number | null>(null); // live 遷移時刻（ミリ秒）。
@@ -57,6 +65,9 @@ export default function TranslateClient() {
 
   useEffect(() => {
     setDebug(new URLSearchParams(window.location.search).has("debug"));
+    setShowAudioSourceSelector(
+      typeof navigator !== "undefined" && !!navigator.mediaDevices?.getDisplayMedia,
+    );
   }, []);
 
   // 翻訳音声のミュート制御（既定は無音）。
@@ -133,34 +144,59 @@ export default function TranslateClient() {
       clearInterval(elapsedTimerRef.current);
       elapsedTimerRef.current = null;
     }
-    const session = new RealtimeSession({
-      onDelta: appendDelta,
-      onStateChange: setState,
-      onError: setErrorCode,
-      onEvent: (info) =>
-        setEventTypes((prev) => ({ ...prev, [info.type]: info.keys.join(", ") })),
-      onDiag: (label, value) => {
-        if (label === "micLevel") {
-          const lvl = Number(value) || 0;
-          setMicLevel(lvl);
-          setMicPeak((p) => Math.max(p, lvl));
-          if (lvl > MIC_ACTIVE) lastActiveAtRef.current = Date.now();
-        }
-        setEventTypes((prev) => ({ ...prev, [`#${label}`]: value }));
+
+    // タブ音声ソース: getDisplayMedia はユーザー操作起点が必須のため、この Start ハンドラ内
+    // （ユーザー操作の呼び出しスタック上）で取得する。RealtimeSession 自身は呼ばない。
+    let displayStream: MediaStream | undefined;
+    if (audioSource === "display") {
+      try {
+        displayStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true,
+        });
+      } catch {
+        // ユーザーがピッカーをキャンセルした場合などもここに来る。
+        setErrorCode("DISPLAY_START_FAILED");
+        return;
+      }
+      if (displayStream.getAudioTracks().length === 0) {
+        for (const track of displayStream.getTracks()) track.stop();
+        setErrorCode("DISPLAY_NO_AUDIO");
+        return;
+      }
+    }
+
+    const session = new RealtimeSession(
+      {
+        onDelta: appendDelta,
+        onStateChange: setState,
+        onError: setErrorCode,
+        onEvent: (info) =>
+          setEventTypes((prev) => ({ ...prev, [info.type]: info.keys.join(", ") })),
+        onDiag: (label, value) => {
+          if (label === "micLevel") {
+            const lvl = Number(value) || 0;
+            setMicLevel(lvl);
+            setMicPeak((p) => Math.max(p, lvl));
+            if (lvl > MIC_ACTIVE) lastActiveAtRef.current = Date.now();
+          }
+          setEventTypes((prev) => ({ ...prev, [`#${label}`]: value }));
+        },
+        onRemoteStream: (stream) => {
+          if (audioRef.current) {
+            audioRef.current.srcObject = stream;
+            audioRef.current
+              .play()
+              .then(() => setEventTypes((prev) => ({ ...prev, "#audioPlay": "ok" })))
+              .catch(() => setEventTypes((prev) => ({ ...prev, "#audioPlay": "blocked" })));
+          }
+        },
       },
-      onRemoteStream: (stream) => {
-        if (audioRef.current) {
-          audioRef.current.srcObject = stream;
-          audioRef.current
-            .play()
-            .then(() => setEventTypes((prev) => ({ ...prev, "#audioPlay": "ok" })))
-            .catch(() => setEventTypes((prev) => ({ ...prev, "#audioPlay": "blocked" })));
-        }
-      },
-    });
+      { source: audioSource, stream: displayStream },
+    );
     sessionRef.current = session;
     await session.start();
-  }, [appendDelta]);
+  }, [appendDelta, audioSource]);
 
   const stop = useCallback(() => {
     // 経過時間タイマーをクリア。
@@ -271,11 +307,20 @@ export default function TranslateClient() {
   }, []);
 
   const isActive = state === "connecting" || state === "live" || state === "reconnecting";
-  const micSilent = state === "live" && micPeak < MIC_ACTIVE;
+  // マイク未検出の警告はマイクソースの時のみ意味を持つ（タブ音声はマイクを使わない）。
+  const micSilent = state === "live" && audioSource === "mic" && micPeak < MIC_ACTIVE;
 
   return (
     <>
-      <Controls state={state} onStart={start} onStop={stop} onClear={clear} />
+      <Controls
+        state={state}
+        onStart={start}
+        onStop={stop}
+        onClear={clear}
+        audioSource={audioSource}
+        onAudioSourceChange={setAudioSource}
+        showAudioSourceSelector={showAudioSourceSelector}
+      />
 
       {errorCode && (
         <p style={{ color: "var(--danger)" }} role="alert">
@@ -297,7 +342,9 @@ export default function TranslateClient() {
         >
           <div style={{ fontSize: 13, color: "var(--muted)" }}>{stateLabel[state]}</div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 13, minWidth: 84 }}>マイク入力</span>
+            <span style={{ fontSize: 13, minWidth: 84 }}>
+              {audioSource === "display" ? "タブ音声入力" : "マイク入力"}
+            </span>
             <div
               style={{
                 flex: 1,
@@ -403,5 +450,10 @@ function errorMessage(code: string): string {
     return "マイクの取得または接続開始に失敗しました。マイク権限を確認してください。";
   if (code.startsWith("SILENCE_STOP"))
     return `無音が${SILENCE_STOP_MINUTES}分続いたため、自動停止しました（コスト保護）。`;
+  if (code.startsWith("DISPLAY_NO_AUDIO"))
+    return "音声が共有されていません。『タブの音声も共有』にチェックしてください。";
+  if (code.startsWith("DISPLAY_START_FAILED"))
+    return "タブ/画面共有の開始に失敗しました（キャンセルされたか、権限がありません）。";
+  if (code.startsWith("DISPLAY_SHARE_ENDED")) return "画面共有が終了したため停止しました。";
   return `エラーが発生しました（コード: ${code}）。再試行してください。`;
 }
