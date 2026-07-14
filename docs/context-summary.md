@@ -45,15 +45,20 @@
 - 確定した実 wire: 発行=`/v1/realtime/translations/client_secrets`、SDP=`/v1/realtime/translations/calls`、翻訳テキスト=`session.output_transcript.delta`。
 - 用途確定: **字幕メイン**。翻訳音声は既定オフ（トグルで任意再生）。会議の周囲音声を拾うため音声処理無効化。
 
-## Phase 2 進捗（2026-07-05）
-- **V2.3 PWA化 完了** ✅: manifest.ts + アイコン一式（favicon/apple-touch-icon/マニフェスト用192・512、いずれも next/og の ImageResponse で動的生成・新規依存なし）。iOS ホーム画面追加でスタンドアロン起動になるよう appleWebApp メタも設定。ビルド後 curl で全ルート200・content-type確認、生成画像を目視確認済み。
-- **V2.5 自動スクロール一時停止 完了**（要人間の目視確認、詳細は上記）。
-- V2.2/V2.4 は人間承認（localStorage方針・依存追加）待ちで BLOCKED。V2.1（タブ音声取込）は未着手・中〜高モデル向けの大きめチケット。
+## Phase 2 進捗（2026-07-14 更新）
+- **V2.3 PWA化 完了** ✅（manifest + 動的生成アイコン一式・新規依存なし・curl/目視確認済み）。
+- **V2.5 自動スクロール一時停止 完了**（要人間の目視確認）。
+- **B-1 修正完了** ✅: V1.5 の無音自動停止が effect churn でタイマー消滅し実質発火しないバグ。lastActiveAtRef + live 中のみの周期 interval（10秒毎）方式に置換（Sonnet5 エージェント実装）。
+- **V2.1 タブ音声取込 完了** ✅（Sonnet5 エージェント実装・Fable5 レビュー済）: 「マイク/タブ音声」切替UI（getDisplayMedia 対応環境のみ表示）。取得は Start の click スタック内（ユーザー操作起点必須のため）。video トラックは保持のみ・音声のみ送信。共有停止(ended)で安全停止。**再接続は既存ストリーム再利用**（teardownConnection の keepStream）。エラーコード: DISPLAY_NO_AUDIO / DISPLAY_START_FAILED / DISPLAY_SHARE_ENDED。
+- **B-2 修正完了** ✅（Fable5 レビューで発見）: 接続前の早期失敗（client secret 失敗等）で渡し済みタブ共有ストリームが解放されないリーク → teardownConnection で providedStream も解放。回帰テスト追加。
+- 単体テスト **39件 green**（reconnect系9件含む）。
+- V2.2/V2.4 は人間承認（localStorage方針・依存追加）待ちで BLOCKED。
+- **V2.6 E2E（Playwright）を Sonnet5 エージェントで進行中**（devDependency 追加はオーナーの 2026-07-14 指示を承認とみなす）。
 
 ## 次のチケット（最大3件）
-1. **人間: V1.4 の実会議60分連続稼働テスト**（コード実装済み・テストのみ残、human-todo.md H-9）。
-2. **人間: V2.5 の目視確認**（読み返し中の自動スクロール停止・「最新へ」ボタン動作）。
-3. V2.1 PC タブ音声取込（ヘッドホン会議対応・中〜高モデル・要スコープ検討）。
+1. V2.6 E2E テスト（進行中・Sonnet5）。
+2. **人間: V1.4 の60分実地テスト / V2.1 の実ブラウザ確認（タブ共有・共有停止・瞬断復帰）/ V2.5 の目視確認**。
+3. V2.2（localStorage 方針承認後）/ V2.4（依存承認後）。
 
 ## 参照
 要件=docs/requirements / 設計=docs/architecture / セキュリティ=docs/security / データ=docs/privacy-data-handling / 戦略=docs/agent-strategy / バックログ=docs/backlog / リスク=docs/risks / チケット=TASKS.md。

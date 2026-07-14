@@ -448,6 +448,13 @@ export class RealtimeSession {
         for (const track of this.stream.getTracks()) track.stop();
       }
       this.stream = null;
+      // 早期失敗（this.stream への代入前、例: client secret 取得失敗）の場合でも、
+      // 呼び出し側から渡されたタブ共有ストリームを確実に解放する
+      // （解放しないとブラウザの「共有中」バーが残り続ける）。track.stop() は冪等。
+      if (this.providedStream) {
+        for (const track of this.providedStream.getTracks()) track.stop();
+        this.providedStream = null;
+      }
     }
     this.dc = null;
     this.pc = null;

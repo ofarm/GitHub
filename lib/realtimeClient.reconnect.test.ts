@@ -356,4 +356,35 @@ describe("RealtimeSession 自動再接続", () => {
     await vi.advanceTimersByTimeAsync(10_000);
     expect(peerConnections.length).toBe(1);
   });
+
+  it("接続前の早期失敗（client secret 取得失敗）でもタブ共有ストリームを解放する", async () => {
+    // client secret 取得が 500 で失敗するケース。this.stream への代入前に fail するため、
+    // 渡されたストリームの解放漏れ（共有バーが残るリーク）の回帰テスト。
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, json: async () => ({ error: "UPSTREAM_500" }) })),
+    );
+    const getDisplayMedia = vi.fn(async () => new FakeDisplayStream());
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia: vi.fn(async () => new FakeStream()), getDisplayMedia },
+    });
+
+    const displayStream = await getDisplayMedia();
+    let errorCode: string | null = null;
+    const session = new RealtimeSession(
+      {
+        onDelta: () => {},
+        onError: (c) => {
+          errorCode = c;
+        },
+      },
+      { source: "display", stream: displayStream as unknown as MediaStream },
+    );
+
+    await session.start();
+    expect(errorCode).toBe("UPSTREAM_500");
+    // 接続に至らなくても、audio/video 両トラックが停止されている（リークなし）。
+    expect(displayStream.audioTrack.stop).toHaveBeenCalled();
+    expect(displayStream.videoTrack.stop).toHaveBeenCalled();
+  });
 });
