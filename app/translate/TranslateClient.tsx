@@ -17,6 +17,7 @@ const MAX_LINES = 50; // 表示行の上限（メモリのみ・保存しない�
 const MIC_ACTIVE = 5; // この値を超えたら「音声を検出」とみなす。
 const SILENCE_STOP_MINUTES = 10; // この分数連続で無音なら自動停止（コスト保護）。
 const SILENCE_STOP_MS = SILENCE_STOP_MINUTES * 60 * 1000;
+const SILENCE_CHECK_INTERVAL_MS = 10_000; // 無音判定の周期チェック間隔（render/micLevel の揺れに影響されない）。
 const COST_PER_MINUTE = 0.051; // OpenAI Realtime translate + whisper（$0.034 + $0.017）。
 
 const stateLabel: Record<RealtimeState, string> = {
@@ -48,8 +49,8 @@ export default function TranslateClient() {
   const curEnRef = useRef<string>("");
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const silenceStartRef = useRef<number | null>(null); // 無音開始時刻（ミリ秒）。
-  const silenceTimerRef = useRef<number | null>(null); // 無音タイマーID。
+  // 最後にマイク入力を検知した時刻（ミリ秒）。render/state の再実行に依存しない。
+  const lastActiveAtRef = useRef<number>(Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0); // live 中の経過時間（秒）。
   const liveStartRef = useRef<number | null>(null); // live 遷移時刻（ミリ秒）。
   const elapsedTimerRef = useRef<number | null>(null); // 経過時間更新用タイマーID。
@@ -123,12 +124,8 @@ export default function TranslateClient() {
     curEnRef.current = "";
     setJaLines([]);
     setEnLines([]);
-    // 無音タイマーをリセット。
-    if (silenceTimerRef.current !== null) {
-      clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = null;
-    }
-    silenceStartRef.current = null;
+    // 無音判定の基準時刻をリセット。
+    lastActiveAtRef.current = Date.now();
     // 経過時間をリセット。
     setElapsedSeconds(0);
     liveStartRef.current = null;
@@ -147,6 +144,7 @@ export default function TranslateClient() {
           const lvl = Number(value) || 0;
           setMicLevel(lvl);
           setMicPeak((p) => Math.max(p, lvl));
+          if (lvl > MIC_ACTIVE) lastActiveAtRef.current = Date.now();
         }
         setEventTypes((prev) => ({ ...prev, [`#${label}`]: value }));
       },
@@ -165,12 +163,6 @@ export default function TranslateClient() {
   }, [appendDelta]);
 
   const stop = useCallback(() => {
-    // 無音タイマーをクリア。
-    if (silenceTimerRef.current !== null) {
-      clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = null;
-    }
-    silenceStartRef.current = null;
     // 経過時間タイマーをクリア。
     if (elapsedTimerRef.current !== null) {
       clearInterval(elapsedTimerRef.current);
@@ -210,50 +202,22 @@ export default function TranslateClient() {
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [state]);
 
-  // 無音自動停止: 10分連続で無音なら自動停止（コスト保護）。
+  // 無音自動停止: live 中だけ動く周期チェック(interval)で、最後に音声を検知した時刻からの
+  // 経過時間が SILENCE_STOP_MS を超えたら自動停止する（コスト保護）。
+  // micLevel の揺れによる re-render/effect 再実行に影響されないよう、
+  // 判定基準は lastActiveAtRef（onDiag の micLevel 更新時に記録）のみを参照する。
   useEffect(() => {
-    if (state !== "live") {
-      // live 以外では無音タイマーをクリア。
-      if (silenceTimerRef.current !== null) {
-        clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = null;
+    if (state !== "live") return;
+    // live に入った時点を基準にする（interval 起動前に誤って無音超過扱いにしないため）。
+    lastActiveAtRef.current = Date.now();
+    const timer = window.setInterval(() => {
+      if (Date.now() - lastActiveAtRef.current > SILENCE_STOP_MS) {
+        setErrorCode("SILENCE_STOP");
+        stop();
       }
-      silenceStartRef.current = null;
-      return;
-    }
-
-    // live 中: micLevel で無音判定。
-    if (micLevel > MIC_ACTIVE) {
-      // 音声あり → 無音タイマーをリセット。
-      if (silenceTimerRef.current !== null) {
-        clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = null;
-      }
-      silenceStartRef.current = null;
-    } else {
-      // 無音中。
-      if (silenceStartRef.current === null) {
-        silenceStartRef.current = Date.now();
-        // SILENCE_STOP_MS 後に自動停止。
-        silenceTimerRef.current = window.setTimeout(() => {
-          // 再度確認: 今もまだ無音か？（ノイズで誤発火防止）
-          if (micLevel <= MIC_ACTIVE) {
-            setErrorCode("SILENCE_STOP");
-            stop();
-          }
-          silenceTimerRef.current = null;
-          silenceStartRef.current = null;
-        }, SILENCE_STOP_MS);
-      }
-    }
-
-    return () => {
-      if (silenceTimerRef.current !== null) {
-        clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = null;
-      }
-    };
-  }, [state, micLevel, stop]);
+    }, SILENCE_CHECK_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [state, stop]);
 
   // 経過時間カウント: live 中に mm:ss を更新。Stop で計測を停止（リセットは次回 Start）。
   useEffect(() => {
@@ -287,11 +251,6 @@ export default function TranslateClient() {
   // 注: visibilitychange:hidden は削除。タブ切替時は接続を保持し、pagehide(タブ閉じ)で初めて解放する。
   useEffect(() => {
     const release = async () => {
-      // 無音タイマーをクリア。
-      if (silenceTimerRef.current !== null) {
-        clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = null;
-      }
       // Wake Lock を解放
       if (wakeLockRef.current) {
         try {
