@@ -53,12 +53,13 @@
 - **B-2 修正完了** ✅（Fable5 レビューで発見）: 接続前の早期失敗（client secret 失敗等）で渡し済みタブ共有ストリームが解放されないリーク → teardownConnection で providedStream も解放。回帰テスト追加。
 - 単体テスト **39件 green**（reconnect系9件含む）。
 - V2.2/V2.4 は人間承認（localStorage方針・依存追加）待ちで BLOCKED。
-- **V2.6 E2E（Playwright）を Sonnet5 エージェントで進行中**（devDependency 追加はオーナーの 2026-07-14 指示を承認とみなす）。
+- **V2.6 E2E（Playwright）完了** ✅: `npm run test:e2e` で 7/7 green。未認証3件（/表示・/translate リダイレクト・API 401）＋PWA3件（manifest・アイコン2）＋認証済み1件（**セッション cookie 偽造**で /translate 表示 → Start → SERVER_MISCONFIGURED 表示の配線確認）。実キー・実メール不使用（架空値のみ、`e2e/testEnv.ts`）。@playwright/test 1.56.1（プリインストール Chromium rev1194 一致）を devDependency 追加（security.md §18 に記録）。
 
-## 次のチケット（最大3件）
-1. V2.6 E2E テスト（進行中・Sonnet5）。
-2. **人間: V1.4 の60分実地テスト / V2.1 の実ブラウザ確認（タブ共有・共有停止・瞬断復帰）/ V2.5 の目視確認**。
-3. V2.2（localStorage 方針承認後）/ V2.4（依存承認後）。
+## 自動化可能な作業は完了（2026-07-14）— 残りは人間の作業
+1. **H-9: V1.4 の実会議60分連続稼働テスト**。
+2. **H-10: V2.1 タブ音声の実ブラウザ確認**（共有チェック・共有停止・瞬断復帰）＋ V2.5 目視。
+3. H-3: ZDR/Modified Abuse Monitoring 申請（既存）。
+4. 承認待ち: V2.2（localStorage 設定値のみ可への AGENTS.md 改訂）/ V2.4（Vercel KV 依存追加）。
 
 ## 参照
 要件=docs/requirements / 設計=docs/architecture / セキュリティ=docs/security / データ=docs/privacy-data-handling / 戦略=docs/agent-strategy / バックログ=docs/backlog / リスク=docs/risks / チケット=TASKS.md。
