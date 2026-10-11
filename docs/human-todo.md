@@ -10,8 +10,8 @@ Agent は実鍵・実データを持てないため、ここに「人間にし�
 アプリは使わない方針になったため、下記以外の項目（H-3〜H-10）は**不要**。
 課金と鍵の悪用リスクを止めるため、上から順に実施する（いずれも Agent からは操作できない外部サービス）。
 
-- [ ] **D-1 OpenAI API キーを無効化（Revoke）** — platform.openai.com → API keys で、このアプリ用の `OPENAI_API_KEY` を削除。これで以後の課金は発生しない。最重要。
-- [ ] **D-2 Vercel のデプロイを停止** — プロジェクトごと削除（Settings → Delete Project）が確実。残す場合も Environment Variables から `OPENAI_API_KEY` / `AUTH_GOOGLE_SECRET` / `AUTH_SECRET` / `SAFETY_ID_SALT` を削除。
+- [x] **D-1 OpenAI API キーを無効化（Revoke）** — platform.openai.com → API keys で、このアプリ用の `OPENAI_API_KEY` を削除。これで以後の課金は発生しない。最重要。
+- [x] **D-2 Vercel のデプロイを停止** — プロジェクトごと削除（Settings → Delete Project）が確実。残す場合も Environment Variables から `OPENAI_API_KEY` / `AUTH_GOOGLE_SECRET` / `AUTH_SECRET` / `SAFETY_ID_SALT` を削除。
 - [ ] **D-3 Google OAuth クライアントを削除** — Google Cloud Console → APIs & Services → Credentials で、このアプリ用の OAuth クライアント ID を削除。
 - [ ] **D-4 ローカルの `.env.local` を削除**（作成していた場合）。
 - [ ] **D-5（任意）GitHub リポジトリをアーカイブ** — Settings → Archive this repository。コードは読み取り専用で残る（削除は不可逆なので不要ならアーカイブで十分）。
